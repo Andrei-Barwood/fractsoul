@@ -1,0 +1,7 @@
+{
+  "request_id": "9480be86-32e9-4cc8-8af8-f658f5273b2e",
+  "accepted": true,
+  "event_id": "550e8400-e29b-41d4-a716-446655440000",
+  "queue_topic": "telemetry.raw.v1",
+  "ingested_at": "2026-03-22T14:00:01Z"
+}

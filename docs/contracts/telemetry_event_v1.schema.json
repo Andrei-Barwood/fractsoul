@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fractsoul.dev/contracts/telemetry_event_v1.schema.json",
+  "title": "Telemetry Event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "timestamp",
+    "site_id",
+    "rack_id",
+    "miner_id",
+    "metrics"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "site_id": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 64
+    },
+    "rack_id": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 64
+    },
+    "miner_id": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 64
+    },
+    "firmware_version": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hashrate_ths",
+        "power_watts",
+        "temp_celsius",
+        "fan_rpm",
+        "efficiency_jth",
+        "status"
+      ],
+      "properties": {
+        "hashrate_ths": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2000
+        },
+        "power_watts": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "temp_celsius": {
+          "type": "number",
+          "minimum": -40,
+          "maximum": 130
+        },
+        "fan_rpm": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30000
+        },
+        "efficiency_jth": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "status": {
+          "type": "string",
+          "enum": ["ok", "warning", "critical", "offline"]
+        }
+      }
+    },
+    "tags": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 128
+      }
+    }
+  }
+}

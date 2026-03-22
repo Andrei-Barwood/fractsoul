@@ -1,22 +1,58 @@
-# MVP Bitcoin Mining - Kickoff D1-D6
+# Fractsoul MVP Monorepo
 
-## Estado
-- [x] D1: Objetivo del MVP, alcance y no-objetivos
-- [x] D2: Usuario operativo
-- [x] D3: KPIs base
-- [x] D4: Arquitectura logica v1
-- [x] D5: ADR stack backend y almacenamiento
-- [x] D6: ADR streaming, observabilidad e infraestructura
+Monorepo base para el MVP de operacion de granjas de Bitcoin mining.
 
-## Navegacion
-- [D1 Objetivo y Alcance](./D1_objetivo_alcance.md)
-- [D2 Usuario Operativo](./D2_usuario_operativo.md)
-- [D3 KPIs Base](./D3_kpis_base.md)
-- [D4 Arquitectura Logica v1](./D4_arquitectura_logica_v1.md)
-- [ADR-001 Stack Backend y Almacenamiento](./ADR-001-stack-backend-almacenamiento.md)
-- [ADR-002 Streaming, Observabilidad e Infraestructura](./ADR-002-streaming-observabilidad-infraestructura.md)
+## Estructura
 
-## Proxima ejecucion sugerida
-- Crear monorepo base con `backend/`, `frontend/`, `infra/`, `docs/`.
-- Inicializar API minima de telemetria y esquema de datos.
-- Construir simulador inicial de 100 ASICs.
+- `backend/services/ingest-api`: API mock de ingesta de telemetria (Go + Gin).
+- `frontend/apps/dashboard`: placeholder de UI operativa.
+- `infra/docker`: recursos de contenedores para desarrollo local.
+- `docs/planning`: documentos D1-D14 y ADRs.
+- `docs/contracts`: contratos JSON/schema.
+- `docs/engineering`: convenciones tecnicas.
+
+## Quickstart local
+
+1. Levantar servicios:
+
+```bash
+docker compose up --build
+```
+
+2. Probar healthcheck:
+
+```bash
+curl http://localhost:8080/healthz
+```
+
+3. Probar endpoint mock de ingesta:
+
+```bash
+curl -X POST http://localhost:8080/v1/telemetry/ingest \
+  -H 'Content-Type: application/json' \
+  -d @docs/contracts/telemetry_event_v1.example.json
+```
+
+4. Aplicar schema TimescaleDB (si el volumen ya existia):
+
+```bash
+./scripts/bootstrap_timescaledb.sh
+```
+
+5. Ejecutar prueba E2E HTTP -> NATS:
+
+```bash
+cd backend/services/ingest-api
+make e2e
+```
+
+## CI
+
+La pipeline minima corre en `.github/workflows/ci.yml` e incluye:
+
+- lint (`gofmt` + `go vet`)
+- tests (`go test ./...`)
+
+## Documentacion de planning
+
+Ver [docs/planning/README.md](docs/planning/README.md).
