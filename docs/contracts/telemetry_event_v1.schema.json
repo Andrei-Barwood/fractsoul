@@ -24,17 +24,20 @@
     "site_id": {
       "type": "string",
       "minLength": 2,
-      "maxLength": 64
+      "maxLength": 64,
+      "pattern": "^site-[a-z]{2}-[0-9]{2}$"
     },
     "rack_id": {
       "type": "string",
       "minLength": 2,
-      "maxLength": 64
+      "maxLength": 64,
+      "pattern": "^rack-[a-z]{2}-[0-9]{2}-[0-9]{2}$"
     },
     "miner_id": {
       "type": "string",
       "minLength": 2,
-      "maxLength": 64
+      "maxLength": 64,
+      "pattern": "^asic-[0-9]{6}$"
     },
     "firmware_version": {
       "type": "string",

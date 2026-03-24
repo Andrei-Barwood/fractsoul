@@ -1,4 +1,4 @@
-.PHONY: run lint test e2e
+.PHONY: run lint test e2e simulate
 
 run:
 	go run ./cmd/api
@@ -11,4 +11,7 @@ test:
 	go test ./...
 
 e2e:
-	go test -tags=e2e ./tests/e2e -v
+	go test -count=1 -tags=e2e ./tests/e2e -v
+
+simulate:
+	go run ./cmd/simulator -miners=100 -duration=2m -tick=5s

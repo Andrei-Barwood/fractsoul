@@ -1,0 +1,14 @@
+{
+  "request_id": "88f6e4d4-d1df-48d8-af13-80fdd7060b6e",
+  "summary": {
+    "window_minutes": 60,
+    "samples": 12000,
+    "avg_hashrate_ths": 147.31,
+    "avg_power_watts": 3348.2,
+    "avg_temp_celsius": 76.11,
+    "p95_temp_celsius": 89.42,
+    "max_temp_celsius": 102.88,
+    "avg_fan_rpm": 6337.4,
+    "avg_efficiency_jth": 22.732
+  }
+}

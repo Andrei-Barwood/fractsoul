@@ -2,8 +2,8 @@
   "event_id": "550e8400-e29b-41d4-a716-446655440000",
   "timestamp": "2026-03-22T14:00:00Z",
   "site_id": "site-cl-01",
-  "rack_id": "rack-a1",
-  "miner_id": "asic-0001",
+  "rack_id": "rack-cl-01-01",
+  "miner_id": "asic-000001",
   "firmware_version": "braiins-2026.1",
   "metrics": {
     "hashrate_ths": 126.5,

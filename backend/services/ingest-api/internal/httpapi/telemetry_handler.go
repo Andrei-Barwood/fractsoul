@@ -51,6 +51,21 @@ func (h *TelemetryHandler) Ingest(c *gin.Context) {
 		return
 	}
 
+	siteID, rackID, minerID, err := telemetry.NormalizeOperationalIDs(request.SiteID, request.RackID, request.MinerID)
+	if err != nil {
+		WriteError(
+			c,
+			http.StatusBadRequest,
+			"validation_error",
+			"invalid operational identifiers",
+			map[string]string{"reason": err.Error()},
+		)
+		return
+	}
+	request.SiteID = siteID
+	request.RackID = rackID
+	request.MinerID = minerID
+
 	response := telemetry.IngestResponse{
 		RequestID:  RequestID(c),
 		Accepted:   true,
