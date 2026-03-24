@@ -80,6 +80,7 @@ paths:
         - $ref: '#/components/parameters/site_id'
         - $ref: '#/components/parameters/rack_id'
         - $ref: '#/components/parameters/miner_id'
+        - $ref: '#/components/parameters/model'
         - $ref: '#/components/parameters/status'
         - $ref: '#/components/parameters/from'
         - $ref: '#/components/parameters/to'
@@ -112,6 +113,7 @@ paths:
         - $ref: '#/components/parameters/site_id'
         - $ref: '#/components/parameters/rack_id'
         - $ref: '#/components/parameters/miner_id'
+        - $ref: '#/components/parameters/model'
         - name: window_minutes
           in: query
           schema:
@@ -151,6 +153,7 @@ paths:
           schema:
             type: string
         - $ref: '#/components/parameters/miner_id'
+        - $ref: '#/components/parameters/model'
         - $ref: '#/components/parameters/status'
         - $ref: '#/components/parameters/from'
         - $ref: '#/components/parameters/to'
@@ -252,6 +255,11 @@ components:
       in: query
       schema:
         type: string
+    model:
+      name: model
+      in: query
+      schema:
+        type: string
     status:
       name: status
       in: query
@@ -346,6 +354,7 @@ components:
         site_id: { type: string }
         rack_id: { type: string }
         miner_id: { type: string }
+        miner_model: { type: string }
         firmware_version: { type: string }
         hashrate_ths: { type: number }
         power_watts: { type: number }

@@ -1,3 +1,9 @@
-# Dashboard App (placeholder)
+# Dashboard App
 
-Este directorio queda reservado para el dashboard operativo del MVP.
+El dashboard operativo v0 se sirve embebido desde la API en:
+
+- `http://localhost:8080/dashboard/`
+
+Los assets viven en:
+
+- `backend/services/ingest-api/internal/httpapi/dashboard/`

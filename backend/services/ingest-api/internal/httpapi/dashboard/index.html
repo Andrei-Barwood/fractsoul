@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fractsoul Dashboard v0</title>
+    <link rel="stylesheet" href="/dashboard/styles.css" />
+  </head>
+  <body>
+    <div class="bg-shape shape-a"></div>
+    <div class="bg-shape shape-b"></div>
+    <main class="layout">
+      <header class="hero reveal">
+        <div>
+          <p class="eyebrow">Fractsoul</p>
+          <h1>Dashboard Operativo v0</h1>
+          <p class="subtitle">KPIs en tiempo real, filtros por sitio/rack/modelo y vista por máquina.</p>
+        </div>
+        <div class="auth-box">
+          <label for="apiKeyInput">API key</label>
+          <div class="auth-row">
+            <input id="apiKeyInput" type="password" placeholder="(opcional)" />
+            <button id="saveApiKeyButton" type="button">Guardar</button>
+          </div>
+          <small id="apiKeyStatus">Auth deshabilitada o sin key local.</small>
+        </div>
+      </header>
+
+      <section class="panel reveal">
+        <div class="filter-row">
+          <label>
+            Sitio
+            <select id="siteFilter">
+              <option value="">Todos</option>
+            </select>
+          </label>
+          <label>
+            Rack
+            <select id="rackFilter">
+              <option value="">Todos</option>
+            </select>
+          </label>
+          <label>
+            Modelo
+            <select id="modelFilter">
+              <option value="">Todos</option>
+            </select>
+          </label>
+          <label>
+            Máquina
+            <select id="minerFilter">
+              <option value="">Selecciona</option>
+            </select>
+          </label>
+          <button id="refreshButton" type="button">Actualizar</button>
+        </div>
+      </section>
+
+      <section class="kpi-grid">
+        <article class="kpi-card reveal">
+          <p class="kpi-label">Hashrate Promedio</p>
+          <p class="kpi-value" id="kpiHashrate">--</p>
+          <p class="kpi-meta">TH/s</p>
+        </article>
+        <article class="kpi-card reveal">
+          <p class="kpi-label">Potencia Promedio</p>
+          <p class="kpi-value" id="kpiPower">--</p>
+          <p class="kpi-meta">W</p>
+        </article>
+        <article class="kpi-card reveal">
+          <p class="kpi-label">Temperatura Promedio</p>
+          <p class="kpi-value" id="kpiTemp">--</p>
+          <p class="kpi-meta">°C</p>
+        </article>
+        <article class="kpi-card reveal">
+          <p class="kpi-label">Eventos Críticos</p>
+          <p class="kpi-value" id="kpiCriticalRatio">--</p>
+          <p class="kpi-meta" id="kpiSampleCount">-- muestras</p>
+        </article>
+      </section>
+
+      <section class="detail-grid">
+        <article class="panel reveal">
+          <h2>Detalle por Máquina</h2>
+          <p id="minerTitle" class="muted">Selecciona una máquina para ver detalle.</p>
+          <div class="metric-grid">
+            <div><span>Modelo</span><strong id="minerModel">--</strong></div>
+            <div><span>Status</span><strong id="minerStatus">--</strong></div>
+            <div><span>Hashrate</span><strong id="minerHashrate">--</strong></div>
+            <div><span>Power</span><strong id="minerPower">--</strong></div>
+            <div><span>Temperatura</span><strong id="minerTemp">--</strong></div>
+            <div><span>Fans</span><strong id="minerFans">--</strong></div>
+          </div>
+          <svg id="timeseriesChart" viewBox="0 0 640 220" role="img" aria-label="Serie temporal"></svg>
+        </article>
+
+        <article class="panel reveal">
+          <h2>Lecturas Recientes</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Hora</th>
+                  <th>Sitio</th>
+                  <th>Rack</th>
+                  <th>Máquina</th>
+                  <th>Modelo</th>
+                  <th>Status</th>
+                  <th>TH/s</th>
+                  <th>W</th>
+                  <th>°C</th>
+                </tr>
+              </thead>
+              <tbody id="readingsTableBody"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <footer class="footer">
+        <p id="lastUpdated">Sin datos.</p>
+      </footer>
+    </main>
+    <script src="/dashboard/app.js"></script>
+  </body>
+</html>

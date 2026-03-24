@@ -25,6 +25,12 @@ docker compose up --build
 curl http://localhost:8080/healthz
 ```
 
+Dashboard operativo v0:
+
+```bash
+open http://localhost:8080/dashboard/
+```
+
 3. Probar endpoint de ingesta:
 
 ```bash

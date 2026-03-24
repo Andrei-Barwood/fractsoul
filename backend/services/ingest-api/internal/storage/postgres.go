@@ -96,6 +96,7 @@ SET site_id = EXCLUDED.site_id,
 	if nominalPower <= 0 {
 		nominalPower = 1
 	}
+	minerModel := parseMinerModel(tags)
 
 	_, err = tx.Exec(ctx, `
 INSERT INTO miners (
@@ -112,11 +113,12 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)
 ON CONFLICT (miner_id) DO UPDATE
 SET site_id = EXCLUDED.site_id,
     rack_id = EXCLUDED.rack_id,
+    miner_model = EXCLUDED.miner_model,
     firmware_version = EXCLUDED.firmware_version,
     nominal_hashrate_ths = EXCLUDED.nominal_hashrate_ths,
     nominal_power_watts = EXCLUDED.nominal_power_watts,
     is_active = TRUE
-`, request.MinerID, request.SiteID, request.RackID, "unknown", request.FirmwareVersion, nominalHashrate, nominalPower)
+`, request.MinerID, request.SiteID, request.RackID, minerModel, request.FirmwareVersion, nominalHashrate, nominalPower)
 	if err != nil {
 		return fmt.Errorf("upsert miner: %w", err)
 	}
@@ -186,54 +188,61 @@ func (r *PostgresRepository) ListReadings(ctx context.Context, filter ReadingsFi
 
 	query := `
 SELECT
-  ts,
-  event_id::text,
-  site_id,
-  rack_id,
-  miner_id,
-  firmware_version,
-  hashrate_ths,
-  power_watts,
-  temp_celsius,
-  fan_rpm,
-  efficiency_jth,
-  status,
-  load_pct,
-  tags,
-  ingested_at
-FROM telemetry_readings
+  tr.ts,
+  tr.event_id::text,
+  tr.site_id,
+  tr.rack_id,
+  tr.miner_id,
+  m.miner_model,
+  tr.firmware_version,
+  tr.hashrate_ths,
+  tr.power_watts,
+  tr.temp_celsius,
+  tr.fan_rpm,
+  tr.efficiency_jth,
+  tr.status,
+  tr.load_pct,
+  tr.tags,
+  tr.ingested_at
+FROM telemetry_readings tr
+LEFT JOIN miners m ON m.miner_id = tr.miner_id
 `
 	clauses := make([]string, 0, 5)
 	args := make([]any, 0, 6)
 	argPos := 1
 
 	if filter.SiteID != "" {
-		clauses = append(clauses, fmt.Sprintf("site_id = $%d", argPos))
+		clauses = append(clauses, fmt.Sprintf("tr.site_id = $%d", argPos))
 		args = append(args, filter.SiteID)
 		argPos++
 	}
 	if filter.RackID != "" {
-		clauses = append(clauses, fmt.Sprintf("rack_id = $%d", argPos))
+		clauses = append(clauses, fmt.Sprintf("tr.rack_id = $%d", argPos))
 		args = append(args, filter.RackID)
 		argPos++
 	}
 	if filter.MinerID != "" {
-		clauses = append(clauses, fmt.Sprintf("miner_id = $%d", argPos))
+		clauses = append(clauses, fmt.Sprintf("tr.miner_id = $%d", argPos))
 		args = append(args, filter.MinerID)
 		argPos++
 	}
+	if filter.Model != "" {
+		clauses = append(clauses, fmt.Sprintf("LOWER(COALESCE(m.miner_model, 'unknown')) = LOWER($%d)", argPos))
+		args = append(args, filter.Model)
+		argPos++
+	}
 	if filter.Status != "" {
-		clauses = append(clauses, fmt.Sprintf("status = $%d", argPos))
+		clauses = append(clauses, fmt.Sprintf("tr.status = $%d", argPos))
 		args = append(args, string(filter.Status))
 		argPos++
 	}
 	if filter.From != nil {
-		clauses = append(clauses, fmt.Sprintf("ts >= $%d", argPos))
+		clauses = append(clauses, fmt.Sprintf("tr.ts >= $%d", argPos))
 		args = append(args, filter.From.UTC())
 		argPos++
 	}
 	if filter.To != nil {
-		clauses = append(clauses, fmt.Sprintf("ts <= $%d", argPos))
+		clauses = append(clauses, fmt.Sprintf("tr.ts <= $%d", argPos))
 		args = append(args, filter.To.UTC())
 		argPos++
 	}
@@ -242,7 +251,7 @@ FROM telemetry_readings
 		query += " WHERE " + strings.Join(clauses, " AND ")
 	}
 
-	query += fmt.Sprintf(" ORDER BY ts DESC LIMIT $%d", argPos)
+	query += fmt.Sprintf(" ORDER BY tr.ts DESC LIMIT $%d", argPos)
 	args = append(args, limit)
 
 	rows, err := r.pool.Query(ctx, query, args...)
@@ -262,6 +271,7 @@ FROM telemetry_readings
 			&item.SiteID,
 			&item.RackID,
 			&item.MinerID,
+			&item.MinerModel,
 			&item.FirmwareVersion,
 			&item.HashrateTHs,
 			&item.PowerWatts,
@@ -333,6 +343,13 @@ WHERE ts >= NOW() - ($1::int * INTERVAL '1 minute')
 	if filter.MinerID != "" {
 		query += fmt.Sprintf(" AND miner_id = $%d", argPos)
 		args = append(args, filter.MinerID)
+		argPos++
+	}
+	if filter.Model != "" {
+		query += " AND miner_id IN (SELECT miner_id FROM miners WHERE LOWER(COALESCE(miner_model, 'unknown')) = LOWER($"
+		query += strconv.Itoa(argPos)
+		query += "))"
+		args = append(args, filter.Model)
 	}
 
 	summary := TelemetrySummary{WindowMinutes: windowMinutes}
@@ -529,4 +546,22 @@ func inferCountryCode(siteID string) string {
 		return strings.ToUpper(parts[1])
 	}
 	return "NA"
+}
+
+func parseMinerModel(tags map[string]string) string {
+	candidates := []string{
+		tags["asic_model"],
+		tags["miner_model"],
+		tags["model"],
+	}
+
+	for _, candidate := range candidates {
+		value := strings.TrimSpace(candidate)
+		if value == "" {
+			continue
+		}
+		return strings.ToUpper(value)
+	}
+
+	return "unknown"
 }

@@ -244,11 +244,13 @@ func buildReadingsFilter(c *gin.Context) (storage.ReadingsFilter, error) {
 	if err != nil {
 		return storage.ReadingsFilter{}, err
 	}
+	model := parseOptionalModel(c.Query("model"))
 
 	return storage.ReadingsFilter{
 		SiteID:  siteID,
 		RackID:  rackID,
 		MinerID: minerID,
+		Model:   model,
 		Status:  status,
 		From:    from,
 		To:      to,
@@ -282,6 +284,7 @@ func buildSummaryFilter(c *gin.Context) (storage.SummaryFilter, error) {
 		SiteID:        siteID,
 		RackID:        rackID,
 		MinerID:       minerID,
+		Model:         parseOptionalModel(c.Query("model")),
 		WindowMinutes: windowMinutes,
 	}, nil
 }
@@ -396,4 +399,12 @@ func defaultSeriesLimitByResolution(resolution storage.BucketResolution) int {
 		return 720
 	}
 	return 1440
+}
+
+func parseOptionalModel(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return ""
+	}
+	return strings.ToUpper(value)
 }

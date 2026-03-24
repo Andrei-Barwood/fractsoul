@@ -58,8 +58,9 @@ func TestIngestPersistsTelemetryInDatabase(t *testing.T) {
 			"status":         "ok",
 		},
 		"tags": map[string]string{
-			"source":   "integration-test",
-			"load_pct": "94.1",
+			"source":     "integration-test",
+			"load_pct":   "94.1",
+			"asic_model": "S21",
 		},
 	}
 
@@ -108,8 +109,9 @@ func TestReadEndpointsReturnPersistedTelemetry(t *testing.T) {
 			"status":         "critical",
 		},
 		"tags": map[string]string{
-			"source":   "integration-test",
-			"load_pct": "96.8",
+			"source":     "integration-test",
+			"load_pct":   "96.8",
+			"asic_model": "M50",
 		},
 	}
 
@@ -119,7 +121,7 @@ func TestReadEndpointsReturnPersistedTelemetry(t *testing.T) {
 	from := url.QueryEscape(eventTime.Add(-2 * time.Minute).Format(time.RFC3339))
 	to := url.QueryEscape(eventTime.Add(5 * time.Minute).Format(time.RFC3339))
 	rackURL := fmt.Sprintf(
-		"%s/v1/telemetry/sites/%s/racks/%s/readings?status=critical&miner_id=%s&from=%s&to=%s&limit=20",
+		"%s/v1/telemetry/sites/%s/racks/%s/readings?status=critical&model=m50&miner_id=%s&from=%s&to=%s&limit=20",
 		apiURL,
 		siteID,
 		rackID,
@@ -130,6 +132,28 @@ func TestReadEndpointsReturnPersistedTelemetry(t *testing.T) {
 	rackResp := getJSON(t, rackURL, apiKeyHeader, apiKey)
 	if count, ok := rackResp["count"].(float64); !ok || int(count) <= 0 {
 		t.Fatalf("expected rack endpoint count > 0, got %#v", rackResp["count"])
+	}
+
+	readingsURL := fmt.Sprintf(
+		"%s/v1/telemetry/readings?model=m50&miner_id=%s&from=%s&to=%s&limit=20",
+		apiURL,
+		minerID,
+		from,
+		to,
+	)
+	readingsResp := getJSON(t, readingsURL, apiKeyHeader, apiKey)
+	if count, ok := readingsResp["count"].(float64); !ok || int(count) <= 0 {
+		t.Fatalf("expected readings endpoint count > 0 for model filter, got %#v", readingsResp["count"])
+	}
+
+	summaryURL := fmt.Sprintf("%s/v1/telemetry/summary?model=m50&window_minutes=60", apiURL)
+	summaryResp := getJSON(t, summaryURL, apiKeyHeader, apiKey)
+	summaryObject, ok := summaryResp["summary"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected summary object, got %#v", summaryResp["summary"])
+	}
+	if samples, ok := summaryObject["samples"].(float64); !ok || int(samples) <= 0 {
+		t.Fatalf("expected summary samples > 0 for model filter, got %#v", summaryObject["samples"])
 	}
 
 	tsURL := fmt.Sprintf(

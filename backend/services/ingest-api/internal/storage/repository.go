@@ -11,6 +11,7 @@ type ReadingsFilter struct {
 	SiteID  string
 	RackID  string
 	MinerID string
+	Model   string
 	Status  telemetry.Status
 	From    *time.Time
 	To      *time.Time
@@ -21,6 +22,7 @@ type SummaryFilter struct {
 	SiteID        string
 	RackID        string
 	MinerID       string
+	Model         string
 	WindowMinutes int
 }
 
@@ -57,6 +59,7 @@ type TelemetryReading struct {
 	SiteID          string            `json:"site_id"`
 	RackID          string            `json:"rack_id"`
 	MinerID         string            `json:"miner_id"`
+	MinerModel      string            `json:"miner_model,omitempty"`
 	FirmwareVersion string            `json:"firmware_version,omitempty"`
 	HashrateTHs     float64           `json:"hashrate_ths"`
 	PowerWatts      float64           `json:"power_watts"`

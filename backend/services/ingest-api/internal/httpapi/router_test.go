@@ -60,6 +60,7 @@ type stubRepository struct {
 	summaryErr         error
 	seriesErr          error
 	lastReadingsFilter storage.ReadingsFilter
+	lastSummaryFilter  storage.SummaryFilter
 	lastSeriesFilter   storage.MinerSeriesFilter
 }
 
@@ -75,7 +76,8 @@ func (r *stubRepository) ListReadings(_ context.Context, filter storage.Readings
 	return r.items, nil
 }
 
-func (r *stubRepository) SummarizeReadings(_ context.Context, _ storage.SummaryFilter) (storage.TelemetrySummary, error) {
+func (r *stubRepository) SummarizeReadings(_ context.Context, filter storage.SummaryFilter) (storage.TelemetrySummary, error) {
+	r.lastSummaryFilter = filter
 	if r.summaryErr != nil {
 		return storage.TelemetrySummary{}, r.summaryErr
 	}
@@ -114,6 +116,23 @@ func TestAuthAllowsHealthzWithoutAPIKey(t *testing.T) {
 
 	if resp.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, resp.Code)
+	}
+}
+
+func TestDashboardRouteIsServed(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	publisher := &stubPublisher{}
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", nil, 1<<20, APIKeyAuthConfig{})
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, resp.Code)
+	}
+	if !strings.Contains(resp.Body.String(), "Dashboard Operativo v0") {
+		t.Fatalf("expected dashboard html body, got %s", resp.Body.String())
 	}
 }
 
@@ -528,7 +547,7 @@ func TestReadingsReturnsItems(t *testing.T) {
 	}
 	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20, APIKeyAuthConfig{})
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/telemetry/readings?site_id=SITE-CL-1&limit=10", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/telemetry/readings?site_id=SITE-CL-1&model=s21&limit=10", nil)
 	resp := httptest.NewRecorder()
 
 	router.ServeHTTP(resp, req)
@@ -545,6 +564,10 @@ func TestReadingsReturnsItems(t *testing.T) {
 	count, ok := body["count"].(float64)
 	if !ok || int(count) != 1 {
 		t.Fatalf("expected count=1, got %#v", body["count"])
+	}
+
+	if repo.lastReadingsFilter.Model != "S21" {
+		t.Fatalf("expected model filter S21, got %s", repo.lastReadingsFilter.Model)
 	}
 }
 
@@ -566,7 +589,7 @@ func TestSummaryReturnsOK(t *testing.T) {
 	}
 	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20, APIKeyAuthConfig{})
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/telemetry/summary?window_minutes=120", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/telemetry/summary?window_minutes=120&model=s21", nil)
 	resp := httptest.NewRecorder()
 
 	router.ServeHTTP(resp, req)
@@ -577,6 +600,10 @@ func TestSummaryReturnsOK(t *testing.T) {
 
 	if !strings.Contains(resp.Body.String(), "\"samples\":120") {
 		t.Fatalf("expected summary payload in response, got %s", resp.Body.String())
+	}
+
+	if repo.lastSummaryFilter.Model != "S21" {
+		t.Fatalf("expected summary model filter S21, got %s", repo.lastSummaryFilter.Model)
 	}
 }
 

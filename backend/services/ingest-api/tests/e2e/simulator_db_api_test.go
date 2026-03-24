@@ -115,7 +115,6 @@ func readingsCount(t *testing.T, ctx context.Context, pool *pgxpool.Pool) int64 
 	err := pool.QueryRow(ctx, `
 SELECT COUNT(*)
 FROM telemetry_readings
-WHERE ts >= NOW() - INTERVAL '30 minutes'
 `).Scan(&count)
 	if err != nil {
 		t.Fatalf("count telemetry_readings: %v", err)

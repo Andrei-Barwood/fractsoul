@@ -1,4 +1,4 @@
-# MVP Bitcoin Mining - Kickoff D1-D47
+# MVP Bitcoin Mining - Kickoff D1-D51
 
 ## Estado
 - [x] D1: Objetivo del MVP, alcance y no-objetivos
@@ -48,6 +48,10 @@
 - [x] D45: Implementar autenticacion basica API
 - [x] D46: Escribir pruebas de integracion API/DB
 - [x] D47: Publicar documentacion OpenAPI minima
+- [x] D48: Crear dashboard v0 (4 metricas clave)
+- [x] D49: Añadir filtros por sitio/rack/modelo
+- [x] D50: Añadir vista detalle por maquina
+- [x] D51: Revision semanal + priorizacion alertas
 
 ## Navegacion
 - [D1 Objetivo y Alcance](./D1_objetivo_alcance.md)
@@ -97,8 +101,12 @@
 - [D45 Autenticacion basica API](./D45_autenticacion_basica_api.md)
 - [D46 Pruebas de integracion API/DB](./D46_pruebas_integracion_api_db.md)
 - [D47 OpenAPI minimo](./D47_openapi_minimo.md)
+- [D48 Dashboard v0 (4 metricas)](./D48_dashboard_v0_cuatro_metricas.md)
+- [D49 Filtros por sitio/rack/modelo](./D49_filtros_sitio_rack_modelo.md)
+- [D50 Vista detalle por maquina](./D50_vista_detalle_por_maquina.md)
+- [D51 Revision semanal y priorizacion alertas](./D51_revision_semanal_priorizacion_alertas.md)
 
 ## Siguiente ejecucion sugerida (S2)
-- D48-D50: Dashboard v0 + filtros + detalle por maquina.
-- D51: Revision semanal y priorizacion de alertas.
-- D52-D58: Motor de reglas, deduplicacion y notificaciones.
+- D52-D55: Motor de reglas y 3 reglas base (temperatura, consumo, hashrate).
+- D56: Deduplicacion y ventana de supresion.
+- D57-D58: Notificaciones y validacion E2E de alertas.

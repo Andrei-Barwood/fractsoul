@@ -22,6 +22,15 @@ func NewRouter(
 	router.Use(RequestIDMiddleware())
 	router.Use(AccessLogMiddleware(logger))
 
+	dashboardFS := dashboardFileSystem()
+	router.GET("/", func(c *gin.Context) {
+		c.Redirect(http.StatusTemporaryRedirect, "/dashboard/")
+	})
+	router.GET("/dashboard", func(c *gin.Context) {
+		c.Redirect(http.StatusTemporaryRedirect, "/dashboard/")
+	})
+	router.StaticFS("/dashboard", dashboardFS)
+
 	telemetryHandler := NewTelemetryHandler(logger, publisher, telemetrySubject, ingestMaxBodyBytes)
 	telemetryReadHandler := NewTelemetryReadHandler(logger, repository)
 

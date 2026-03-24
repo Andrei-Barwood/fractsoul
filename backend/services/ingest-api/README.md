@@ -33,16 +33,23 @@ Variables:
 - `GET /v1/telemetry/summary`
 - `GET /v1/telemetry/sites/:site_id/racks/:rack_id/readings`
 - `GET /v1/telemetry/miners/:miner_id/timeseries`
+- `GET /dashboard/` (dashboard v0 embebido)
 
 Ejemplos:
 
 ```bash
-curl "http://localhost:8080/v1/telemetry/readings?site_id=site-cl-01&limit=5"
-curl "http://localhost:8080/v1/telemetry/summary?window_minutes=60"
-curl "http://localhost:8080/v1/telemetry/sites/site-cl-01/racks/rack-cl-01-01/readings?status=warning&limit=20"
+curl "http://localhost:8080/v1/telemetry/readings?site_id=site-cl-01&model=s21&limit=5"
+curl "http://localhost:8080/v1/telemetry/summary?window_minutes=60&model=s21"
+curl "http://localhost:8080/v1/telemetry/sites/site-cl-01/racks/rack-cl-01-01/readings?status=warning&model=s21&limit=20"
 curl "http://localhost:8080/v1/telemetry/miners/asic-000001/timeseries?resolution=minute&from=2026-03-24T00:00:00Z&to=2026-03-24T12:00:00Z"
 # Si API auth esta habilitada:
 curl -H "X-API-Key: local-dev-key" "http://localhost:8080/v1/telemetry/readings?limit=5"
+```
+
+Dashboard v0:
+
+```bash
+open http://localhost:8080/dashboard/
 ```
 
 ## Validacion y errores
