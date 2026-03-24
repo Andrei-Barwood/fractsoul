@@ -89,6 +89,12 @@ make simulate
 ./scripts/e2e_alerts_flow.sh
 ```
 
+12. Demo S2 con fallas simuladas:
+
+```bash
+./scripts/demo_s2_fallas_simuladas.sh
+```
+
 ## CI
 
 La pipeline minima corre en `.github/workflows/ci.yml` e incluye:

@@ -1,4 +1,4 @@
-# MVP Bitcoin Mining - Kickoff D1-D58
+# MVP Bitcoin Mining - Kickoff D1-D60
 
 ## Estado
 - [x] D1: Objetivo del MVP, alcance y no-objetivos
@@ -59,6 +59,8 @@
 - [x] D56: Deduplicacion y ventana de supresion
 - [x] D57: Notificaciones via webhook/email
 - [x] D58: Validar flujo completo de alertas
+- [x] D59: Demo S2 con casos de fallo simulado
+- [x] D60: Retro S2 + plan detallado S3
 
 ## Navegacion
 - [D1 Objetivo y Alcance](./D1_objetivo_alcance.md)
@@ -119,7 +121,10 @@
 - [D56 Deduplicacion y ventana de supresion](./D56_deduplicacion_ventana_supresion.md)
 - [D57 Notificaciones webhook/email](./D57_notificaciones_webhook_email.md)
 - [D58 Validacion E2E flujo alertas](./D58_validacion_flujo_alertas_e2e.md)
+- [D59 Demo S2 con fallos simulados](./D59_demo_s2_casos_fallo_simulado.md)
+- [D60 Retro S2 y plan S3](./D60_retro_s2_plan_detallado_s3.md)
 
-## Siguiente ejecucion sugerida (S2)
-- D59: Demo S2 con casos de fallo simulado.
-- D60: Retro S2 + plan detallado S3.
+## Siguiente ejecucion sugerida (S3)
+- Publicar API de alertas (`list/detail/ack/resolve`) con contrato OpenAPI.
+- Implementar outbox y dead-letter de notificaciones para canales webhook/email.
+- Crear dashboard de alertas v1 y playbooks de respuesta operativa.

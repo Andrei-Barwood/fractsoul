@@ -108,6 +108,7 @@ E2E full stack desde raiz del repo:
 ```bash
 ./scripts/e2e_simulator_db_api.sh
 ./scripts/e2e_alerts_flow.sh
+./scripts/demo_s2_fallas_simuladas.sh
 ```
 
 ## Simulador ASIC
