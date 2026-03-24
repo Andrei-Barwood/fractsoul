@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -55,6 +56,22 @@ func TestSimulatorPipelineToDBAndReadAPI(t *testing.T) {
 
 	if samples, ok := summaryAny["samples"].(float64); !ok || int(samples) <= 0 {
 		t.Fatalf("expected summary samples > 0, got %#v", summaryAny["samples"])
+	}
+
+	rackResp := getJSON(t, apiURL+"/v1/telemetry/sites/site-cl-01/racks/rack-cl-01-01/readings?limit=5")
+	if count, ok := rackResp["count"].(float64); !ok || int(count) <= 0 {
+		t.Fatalf("expected rack readings count > 0, got %#v", rackResp["count"])
+	}
+
+	now := time.Now().UTC()
+	from := url.QueryEscape(now.Add(-2 * time.Hour).Format(time.RFC3339))
+	to := url.QueryEscape(now.Format(time.RFC3339))
+	timeseriesResp := getJSON(
+		t,
+		apiURL+"/v1/telemetry/miners/asic-000001/timeseries?resolution=minute&from="+from+"&to="+to+"&limit=120",
+	)
+	if count, ok := timeseriesResp["count"].(float64); !ok || int(count) <= 0 {
+		t.Fatalf("expected miner timeseries count > 0, got %#v", timeseriesResp["count"])
 	}
 }
 

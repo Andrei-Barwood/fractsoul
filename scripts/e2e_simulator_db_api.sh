@@ -48,9 +48,19 @@ fi
 echo "[5/5] Validating read API..."
 READINGS_RESPONSE="$(curl -fsS "${API_URL}/v1/telemetry/readings?limit=5")"
 SUMMARY_RESPONSE="$(curl -fsS "${API_URL}/v1/telemetry/summary?window_minutes=30")"
+RACK_RESPONSE="$(curl -fsS "${API_URL}/v1/telemetry/sites/site-cl-01/racks/rack-cl-01-01/readings?limit=5")"
+NOW_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+FROM_UTC="$(date -u -v-2H +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || python3 - <<'PY'
+from datetime import datetime, timedelta, timezone
+print((datetime.now(timezone.utc)-timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ"))
+PY
+)"
+TIMESERIES_RESPONSE="$(curl -fsS "${API_URL}/v1/telemetry/miners/asic-000001/timeseries?resolution=minute&from=${FROM_UTC}&to=${NOW_UTC}&limit=120")"
 
 echo "Readings response snippet: ${READINGS_RESPONSE:0:200}"
 echo "Summary response snippet: ${SUMMARY_RESPONSE:0:200}"
+echo "Rack response snippet: ${RACK_RESPONSE:0:200}"
+echo "Timeseries response snippet: ${TIMESERIES_RESPONSE:0:200}"
 
 if ! grep -q '"count":' <<<"${READINGS_RESPONSE}"; then
   echo "E2E failed: read API readings endpoint returned unexpected payload." >&2
@@ -59,6 +69,16 @@ fi
 
 if ! grep -q '"samples":' <<<"${SUMMARY_RESPONSE}"; then
   echo "E2E failed: read API summary endpoint returned unexpected payload." >&2
+  exit 1
+fi
+
+if ! grep -q '"count":' <<<"${RACK_RESPONSE}"; then
+  echo "E2E failed: rack endpoint returned unexpected payload." >&2
+  exit 1
+fi
+
+if ! grep -q '"count":' <<<"${TIMESERIES_RESPONSE}"; then
+  echo "E2E failed: timeseries endpoint returned unexpected payload." >&2
   exit 1
 fi
 

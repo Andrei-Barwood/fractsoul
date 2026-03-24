@@ -28,12 +28,16 @@ Variables:
 - `POST /v1/telemetry/ingest`
 - `GET /v1/telemetry/readings`
 - `GET /v1/telemetry/summary`
+- `GET /v1/telemetry/sites/:site_id/racks/:rack_id/readings`
+- `GET /v1/telemetry/miners/:miner_id/timeseries`
 
 Ejemplos:
 
 ```bash
 curl "http://localhost:8080/v1/telemetry/readings?site_id=site-cl-01&limit=5"
 curl "http://localhost:8080/v1/telemetry/summary?window_minutes=60"
+curl "http://localhost:8080/v1/telemetry/sites/site-cl-01/racks/rack-cl-01-01/readings?status=warning&limit=20"
+curl "http://localhost:8080/v1/telemetry/miners/asic-000001/timeseries?resolution=minute&from=2026-03-24T00:00:00Z&to=2026-03-24T12:00:00Z"
 ```
 
 ## Validacion y errores
@@ -49,6 +53,12 @@ Con compose levantado:
 
 ```bash
 make e2e
+```
+
+Prueba de performance con 100 ASICs:
+
+```bash
+make perf
 ```
 
 E2E full stack desde raiz del repo:

@@ -1,0 +1,36 @@
+{
+  "request_id": "2b2c4e4a-fc43-41b4-b540-057d4c2be2a5",
+  "site_id": "site-cl-01",
+  "rack_id": "rack-cl-01-01",
+  "count": 2,
+  "items": [
+    {
+      "timestamp": "2026-03-24T14:40:00Z",
+      "event_id": "cc3c64d1-4f0b-40b1-a1d8-6d7ba374f1c4",
+      "site_id": "site-cl-01",
+      "rack_id": "rack-cl-01-01",
+      "miner_id": "asic-000001",
+      "hashrate_ths": 152.71,
+      "power_watts": 3443.22,
+      "temp_celsius": 73.62,
+      "fan_rpm": 6182,
+      "efficiency_jth": 22.548,
+      "status": "warning",
+      "load_pct": 92.3
+    },
+    {
+      "timestamp": "2026-03-24T14:39:58Z",
+      "event_id": "14f572c8-6a05-46f3-b6cb-1bd9f76a21d6",
+      "site_id": "site-cl-01",
+      "rack_id": "rack-cl-01-01",
+      "miner_id": "asic-000002",
+      "hashrate_ths": 149.16,
+      "power_watts": 3391.54,
+      "temp_celsius": 74.9,
+      "fan_rpm": 6253,
+      "efficiency_jth": 22.738,
+      "status": "warning",
+      "load_pct": 89.7
+    }
+  ]
+}

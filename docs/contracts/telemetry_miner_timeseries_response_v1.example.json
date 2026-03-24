@@ -1,0 +1,32 @@
+{
+  "request_id": "b9dd7392-266f-4f56-9c9e-5d8cae9cd2b8",
+  "miner_id": "asic-000001",
+  "resolution": "minute",
+  "from": "2026-03-24T14:00:00Z",
+  "to": "2026-03-24T14:10:00Z",
+  "count": 2,
+  "items": [
+    {
+      "bucket": "2026-03-24T14:00:00Z",
+      "samples": 5,
+      "avg_hashrate_ths": 151.3,
+      "avg_power_watts": 3431.8,
+      "avg_temp_celsius": 75.1,
+      "max_temp_celsius": 82.4,
+      "avg_fan_rpm": 6214.8,
+      "avg_efficiency_jth": 22.68,
+      "critical_events": 0
+    },
+    {
+      "bucket": "2026-03-24T14:01:00Z",
+      "samples": 5,
+      "avg_hashrate_ths": 149.9,
+      "avg_power_watts": 3412.3,
+      "avg_temp_celsius": 76.4,
+      "max_temp_celsius": 89.2,
+      "avg_fan_rpm": 6291.2,
+      "avg_efficiency_jth": 22.76,
+      "critical_events": 1
+    }
+  ]
+}

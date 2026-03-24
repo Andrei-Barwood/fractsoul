@@ -53,17 +53,22 @@ func (p *stubPublisher) Close() error {
 }
 
 type stubRepository struct {
-	items      []storage.TelemetryReading
-	summary    storage.TelemetrySummary
-	listErr    error
-	summaryErr error
+	items              []storage.TelemetryReading
+	summary            storage.TelemetrySummary
+	series             []storage.MinerSeriesPoint
+	listErr            error
+	summaryErr         error
+	seriesErr          error
+	lastReadingsFilter storage.ReadingsFilter
+	lastSeriesFilter   storage.MinerSeriesFilter
 }
 
 func (r *stubRepository) PersistTelemetry(_ context.Context, _ telemetry.IngestRequest, _ []byte) error {
 	return nil
 }
 
-func (r *stubRepository) ListReadings(_ context.Context, _ storage.ReadingsFilter) ([]storage.TelemetryReading, error) {
+func (r *stubRepository) ListReadings(_ context.Context, filter storage.ReadingsFilter) ([]storage.TelemetryReading, error) {
+	r.lastReadingsFilter = filter
 	if r.listErr != nil {
 		return nil, r.listErr
 	}
@@ -75,6 +80,14 @@ func (r *stubRepository) SummarizeReadings(_ context.Context, _ storage.SummaryF
 		return storage.TelemetrySummary{}, r.summaryErr
 	}
 	return r.summary, nil
+}
+
+func (r *stubRepository) ListMinerSeries(_ context.Context, filter storage.MinerSeriesFilter) ([]storage.MinerSeriesPoint, error) {
+	r.lastSeriesFilter = filter
+	if r.seriesErr != nil {
+		return nil, r.seriesErr
+	}
+	return r.series, nil
 }
 
 func (r *stubRepository) Close() {}
@@ -482,5 +495,112 @@ func TestSummaryReturnsOK(t *testing.T) {
 
 	if !strings.Contains(resp.Body.String(), "\"samples\":120") {
 		t.Fatalf("expected summary payload in response, got %s", resp.Body.String())
+	}
+}
+
+func TestRackReadingsEndpointAppliesPathAndStatusFilters(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	publisher := &stubPublisher{}
+	repo := &stubRepository{
+		items: []storage.TelemetryReading{
+			{
+				Timestamp: time.Date(2026, 3, 24, 14, 0, 0, 0, time.UTC),
+				EventID:   "550e8400-e29b-41d4-a716-446655440011",
+				SiteID:    "site-cl-01",
+				RackID:    "rack-cl-01-01",
+				MinerID:   "asic-000001",
+				Status:    telemetry.StatusWarning,
+			},
+		},
+	}
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20)
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/v1/telemetry/sites/SITE-CL-1/racks/rack-a1/readings?status=warning&limit=10",
+		nil,
+	)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, resp.Code, resp.Body.String())
+	}
+
+	if repo.lastReadingsFilter.SiteID != "site-cl-01" {
+		t.Fatalf("expected normalized site_id, got %s", repo.lastReadingsFilter.SiteID)
+	}
+	if repo.lastReadingsFilter.RackID != "rack-cl-01-01" {
+		t.Fatalf("expected normalized rack_id, got %s", repo.lastReadingsFilter.RackID)
+	}
+	if repo.lastReadingsFilter.Status != telemetry.StatusWarning {
+		t.Fatalf("expected status filter warning, got %s", repo.lastReadingsFilter.Status)
+	}
+}
+
+func TestMinerTimeseriesEndpointReturnsSeries(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	publisher := &stubPublisher{}
+	repo := &stubRepository{
+		series: []storage.MinerSeriesPoint{
+			{
+				Bucket:         time.Date(2026, 3, 24, 14, 0, 0, 0, time.UTC),
+				Samples:        12,
+				AvgHashrateTHs: 131.5,
+			},
+		},
+	}
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20)
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/v1/telemetry/miners/ASIC_42/timeseries?resolution=hour&from=2026-03-24T00:00:00Z&to=2026-03-24T12:00:00Z&limit=24",
+		nil,
+	)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, resp.Code, resp.Body.String())
+	}
+
+	if repo.lastSeriesFilter.MinerID != "asic-000042" {
+		t.Fatalf("expected normalized miner_id, got %s", repo.lastSeriesFilter.MinerID)
+	}
+	if repo.lastSeriesFilter.Resolution != storage.ResolutionHour {
+		t.Fatalf("expected resolution hour, got %s", repo.lastSeriesFilter.Resolution)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if count, ok := body["count"].(float64); !ok || int(count) != 1 {
+		t.Fatalf("expected count=1, got %#v", body["count"])
+	}
+}
+
+func TestMinerTimeseriesRejectsInvalidResolution(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	publisher := &stubPublisher{}
+	repo := &stubRepository{}
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20)
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/v1/telemetry/miners/asic-000001/timeseries?resolution=day",
+		nil,
+	)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusBadRequest, resp.Code, resp.Body.String())
+	}
+	if !strings.Contains(resp.Body.String(), "validation_error") {
+		t.Fatalf("expected validation_error response, got %s", resp.Body.String())
 	}
 }

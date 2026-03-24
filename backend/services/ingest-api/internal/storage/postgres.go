@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -10,12 +11,15 @@ import (
 
 	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/telemetry"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
-	defaultQueryLimit = 50
-	maxQueryLimit     = 500
+	defaultQueryLimit  = 50
+	maxQueryLimit      = 500
+	defaultSeriesLimit = 720
+	maxSeriesLimit     = 10000
 )
 
 type PostgresRepository struct {
@@ -218,6 +222,11 @@ FROM telemetry_readings
 		args = append(args, filter.MinerID)
 		argPos++
 	}
+	if filter.Status != "" {
+		clauses = append(clauses, fmt.Sprintf("status = $%d", argPos))
+		args = append(args, string(filter.Status))
+		argPos++
+	}
 	if filter.From != nil {
 		clauses = append(clauses, fmt.Sprintf("ts >= $%d", argPos))
 		args = append(args, filter.From.UTC())
@@ -341,6 +350,160 @@ WHERE ts >= NOW() - ($1::int * INTERVAL '1 minute')
 	}
 
 	return summary, nil
+}
+
+func (r *PostgresRepository) ListMinerSeries(ctx context.Context, filter MinerSeriesFilter) ([]MinerSeriesPoint, error) {
+	if strings.TrimSpace(filter.MinerID) == "" {
+		return nil, fmt.Errorf("miner_id is required")
+	}
+	if filter.To.Before(filter.From) {
+		return nil, fmt.Errorf("from must be before to")
+	}
+
+	resolution := filter.Resolution
+	if resolution != ResolutionMinute && resolution != ResolutionHour {
+		resolution = ResolutionMinute
+	}
+
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = defaultSeriesLimit
+	}
+	if limit > maxSeriesLimit {
+		limit = maxSeriesLimit
+	}
+
+	viewName, bucketInterval := seriesSourceForResolution(resolution)
+	query := fmt.Sprintf(`
+SELECT
+  bucket,
+  samples,
+  avg_hashrate_ths,
+  avg_power_watts,
+  avg_temp_celsius,
+  max_temp_celsius,
+  avg_fan_rpm,
+  avg_efficiency_jth,
+  critical_events
+FROM %s
+WHERE miner_id = $1
+  AND bucket >= $2
+  AND bucket <= $3
+ORDER BY bucket ASC
+LIMIT $4
+`, viewName)
+
+	rows, err := r.pool.Query(ctx, query, filter.MinerID, filter.From.UTC(), filter.To.UTC(), limit)
+	if err != nil {
+		if isUndefinedRelation(err) {
+			return r.listMinerSeriesFromRaw(ctx, filter, bucketInterval, limit)
+		}
+		return nil, fmt.Errorf("query miner series from %s: %w", viewName, err)
+	}
+	defer rows.Close()
+
+	points, err := scanMinerSeries(rows)
+	if err != nil {
+		return nil, err
+	}
+
+	// Fallback to raw telemetry when continuous aggregates are empty/unrefreshed.
+	if len(points) == 0 {
+		return r.listMinerSeriesFromRaw(ctx, filter, bucketInterval, limit)
+	}
+
+	return points, nil
+}
+
+func (r *PostgresRepository) listMinerSeriesFromRaw(
+	ctx context.Context,
+	filter MinerSeriesFilter,
+	bucketInterval string,
+	limit int,
+) ([]MinerSeriesPoint, error) {
+	query := `
+SELECT
+  time_bucket($4::interval, ts) AS bucket,
+  COUNT(*)::bigint AS samples,
+  COALESCE(AVG(hashrate_ths), 0) AS avg_hashrate_ths,
+  COALESCE(AVG(power_watts), 0) AS avg_power_watts,
+  COALESCE(AVG(temp_celsius), 0) AS avg_temp_celsius,
+  COALESCE(MAX(temp_celsius), 0) AS max_temp_celsius,
+  COALESCE(AVG(fan_rpm), 0) AS avg_fan_rpm,
+  COALESCE(AVG(efficiency_jth), 0) AS avg_efficiency_jth,
+  COALESCE(SUM(CASE WHEN status IN ('critical', 'offline') THEN 1 ELSE 0 END), 0)::bigint AS critical_events
+FROM telemetry_readings
+WHERE miner_id = $1
+  AND ts >= $2
+  AND ts <= $3
+GROUP BY bucket
+ORDER BY bucket ASC
+LIMIT $5
+`
+
+	rows, err := r.pool.Query(
+		ctx,
+		query,
+		filter.MinerID,
+		filter.From.UTC(),
+		filter.To.UTC(),
+		bucketInterval,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query miner series from telemetry_readings: %w", err)
+	}
+	defer rows.Close()
+
+	points, err := scanMinerSeries(rows)
+	if err != nil {
+		return nil, err
+	}
+	return points, nil
+}
+
+func scanMinerSeries(rows pgx.Rows) ([]MinerSeriesPoint, error) {
+	points := make([]MinerSeriesPoint, 0)
+	for rows.Next() {
+		var point MinerSeriesPoint
+		if err := rows.Scan(
+			&point.Bucket,
+			&point.Samples,
+			&point.AvgHashrateTHs,
+			&point.AvgPowerWatts,
+			&point.AvgTempCelsius,
+			&point.MaxTempCelsius,
+			&point.AvgFanRPM,
+			&point.AvgEfficiencyJTH,
+			&point.CriticalEvents,
+		); err != nil {
+			return nil, fmt.Errorf("scan miner series point: %w", err)
+		}
+		points = append(points, point)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate miner series rows: %w", err)
+	}
+
+	return points, nil
+}
+
+func seriesSourceForResolution(resolution BucketResolution) (viewName string, bucketInterval string) {
+	switch resolution {
+	case ResolutionHour:
+		return "telemetry_agg_hour", "1 hour"
+	default:
+		return "telemetry_agg_minute", "1 minute"
+	}
+}
+
+func isUndefinedRelation(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "42P01"
+	}
+	return false
 }
 
 func (r *PostgresRepository) Close() {

@@ -1,4 +1,4 @@
-# MVP Bitcoin Mining - Kickoff D1-D37
+# MVP Bitcoin Mining - Kickoff D1-D43
 
 ## Estado
 - [x] D1: Objetivo del MVP, alcance y no-objetivos
@@ -38,6 +38,12 @@
 - [x] D35: Validacion de payloads + manejo de errores
 - [x] D36: Cola de reintentos y dead-letter basico
 - [x] D37: Revision semanal + ajuste de prioridades
+- [x] D38: Optimizar hypertables/indices en Timescale
+- [x] D39: Configurar politicas de retencion
+- [x] D40: Crear agregaciones continuas por minuto/hora
+- [x] D41: Endpoint por sitio/rack con filtros
+- [x] D42: Endpoint por maquina y rango temporal
+- [x] D43: Pruebas de performance con 100 ASICs
 
 ## Navegacion
 - [D1 Objetivo y Alcance](./D1_objetivo_alcance.md)
@@ -77,8 +83,14 @@
 - [D35 Validacion de payloads y errores](./D35_validacion_payloads_manejo_errores.md)
 - [D36 Retry queue y dead-letter basico](./D36_cola_reintentos_dead_letter_basico.md)
 - [D37 Revision semanal y prioridades](./D37_revision_semanal_ajuste_prioridades.md)
+- [D38 Optimizar hypertables e indices](./D38_optimizar_hypertables_indices_timescale.md)
+- [D39 Politicas de retencion](./D39_configurar_politicas_retencion.md)
+- [D40 Agregaciones continuas minuto/hora](./D40_agregaciones_continuas_minuto_hora.md)
+- [D41 Endpoint por sitio/rack](./D41_endpoint_sitio_rack_con_filtros.md)
+- [D42 Endpoint por maquina y rango temporal](./D42_endpoint_maquina_rango_temporal.md)
+- [D43 Pruebas de performance 100 ASICs](./D43_pruebas_performance_100_asics.md)
 
 ## Siguiente ejecucion sugerida (S2)
-- D38-D40: optimizacion de datos en Timescale (indices, retencion, agregaciones continuas).
-- D41-D42: evolucion de read API (filtros por sitio/rack y rango por maquina).
-- D43: performance test 100 ASICs con umbrales y hallazgos documentados.
+- D44+: Observabilidad avanzada (Prometheus + OTel) en ingest/processor/read API.
+- D44+: Seguridad baseline (API keys y rate limiting por sitio).
+- D44+: Hardening de operacion DLQ (replay y consola de inspeccion).

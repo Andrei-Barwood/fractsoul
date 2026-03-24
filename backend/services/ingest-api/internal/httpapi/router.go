@@ -33,6 +33,8 @@ func NewRouter(
 		v1.POST("/telemetry/ingest", telemetryHandler.Ingest)
 		v1.GET("/telemetry/readings", telemetryReadHandler.Readings)
 		v1.GET("/telemetry/summary", telemetryReadHandler.Summary)
+		v1.GET("/telemetry/sites/:site_id/racks/:rack_id/readings", telemetryReadHandler.RackReadings)
+		v1.GET("/telemetry/miners/:miner_id/timeseries", telemetryReadHandler.MinerTimeSeries)
 	}
 
 	return router

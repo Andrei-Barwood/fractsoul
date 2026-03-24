@@ -11,6 +11,7 @@ type ReadingsFilter struct {
 	SiteID  string
 	RackID  string
 	MinerID string
+	Status  telemetry.Status
 	From    *time.Time
 	To      *time.Time
 	Limit   int
@@ -21,6 +22,33 @@ type SummaryFilter struct {
 	RackID        string
 	MinerID       string
 	WindowMinutes int
+}
+
+type BucketResolution string
+
+const (
+	ResolutionMinute BucketResolution = "minute"
+	ResolutionHour   BucketResolution = "hour"
+)
+
+type MinerSeriesFilter struct {
+	MinerID    string
+	From       time.Time
+	To         time.Time
+	Resolution BucketResolution
+	Limit      int
+}
+
+type MinerSeriesPoint struct {
+	Bucket           time.Time `json:"bucket"`
+	Samples          int64     `json:"samples"`
+	AvgHashrateTHs   float64   `json:"avg_hashrate_ths"`
+	AvgPowerWatts    float64   `json:"avg_power_watts"`
+	AvgTempCelsius   float64   `json:"avg_temp_celsius"`
+	MaxTempCelsius   float64   `json:"max_temp_celsius"`
+	AvgFanRPM        float64   `json:"avg_fan_rpm"`
+	AvgEfficiencyJTH float64   `json:"avg_efficiency_jth"`
+	CriticalEvents   int64     `json:"critical_events"`
 }
 
 type TelemetryReading struct {
@@ -57,5 +85,6 @@ type Repository interface {
 	PersistTelemetry(ctx context.Context, request telemetry.IngestRequest, rawPayload []byte) error
 	ListReadings(ctx context.Context, filter ReadingsFilter) ([]TelemetryReading, error)
 	SummarizeReadings(ctx context.Context, filter SummaryFilter) (TelemetrySummary, error)
+	ListMinerSeries(ctx context.Context, filter MinerSeriesFilter) ([]MinerSeriesPoint, error)
 	Close()
 }

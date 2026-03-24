@@ -65,6 +65,12 @@ make simulate
 ./scripts/e2e_simulator_db_api.sh
 ```
 
+9. Prueba de performance (100 ASICs):
+
+```bash
+./scripts/perf_100_asic.sh
+```
+
 ## CI
 
 La pipeline minima corre en `.github/workflows/ci.yml` e incluye:
