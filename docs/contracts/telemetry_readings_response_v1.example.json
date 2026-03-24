@@ -1,0 +1,46 @@
+{
+  "request_id": "9b00fa43-798e-47f9-a79a-ae00e80ea22a",
+  "count": 2,
+  "items": [
+    {
+      "timestamp": "2026-03-24T14:40:00Z",
+      "event_id": "cc3c64d1-4f0b-40b1-a1d8-6d7ba374f1c4",
+      "site_id": "site-cl-01",
+      "rack_id": "rack-cl-01-01",
+      "miner_id": "asic-000001",
+      "firmware_version": "braiins-2026.1",
+      "hashrate_ths": 152.71,
+      "power_watts": 3443.22,
+      "temp_celsius": 73.62,
+      "fan_rpm": 6182,
+      "efficiency_jth": 22.548,
+      "status": "ok",
+      "load_pct": 92.3,
+      "tags": {
+        "source": "simulator",
+        "fault": "none"
+      },
+      "ingested_at": "2026-03-24T14:40:01Z"
+    },
+    {
+      "timestamp": "2026-03-24T14:39:58Z",
+      "event_id": "14f572c8-6a05-46f3-b6cb-1bd9f76a21d6",
+      "site_id": "site-cl-01",
+      "rack_id": "rack-cl-01-01",
+      "miner_id": "asic-000001",
+      "firmware_version": "braiins-2026.1",
+      "hashrate_ths": 149.16,
+      "power_watts": 3391.54,
+      "temp_celsius": 74.9,
+      "fan_rpm": 6253,
+      "efficiency_jth": 22.738,
+      "status": "warning",
+      "load_pct": 89.7,
+      "tags": {
+        "source": "simulator",
+        "fault": "hash_drop"
+      },
+      "ingested_at": "2026-03-24T14:39:59Z"
+    }
+  ]
+}

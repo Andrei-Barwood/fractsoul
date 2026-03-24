@@ -9,6 +9,8 @@ import (
 
 	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/httpapi"
 	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/observability"
+	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/processor"
+	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/storage"
 	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/telemetry"
 	"github.com/gin-gonic/gin"
 )
@@ -33,7 +35,37 @@ func Run(ctx context.Context, cfg Config) error {
 		"subject", cfg.TelemetrySubject,
 	)
 
-	router := httpapi.NewRouter(logger, publisher, cfg.TelemetrySubject)
+	var repository storage.Repository
+	if cfg.DatabaseURL != "" {
+		repository, err = storage.NewPostgresRepository(ctx, cfg.DatabaseURL)
+		if err != nil {
+			return fmt.Errorf("connect postgres: %w", err)
+		}
+		defer repository.Close()
+		logger.Info("postgres repository ready")
+	} else {
+		logger.Warn("database url not configured; persistence and read api disabled")
+	}
+
+	if repository != nil && cfg.ProcessorEnabled {
+		consumer, err := processor.NewConsumer(logger, repository, cfg.NATSURL, cfg.TelemetrySubject)
+		if err != nil {
+			return fmt.Errorf("start telemetry processor: %w", err)
+		}
+		defer func() {
+			if closeErr := consumer.Close(); closeErr != nil {
+				logger.Error("failed to close telemetry processor", "error", closeErr)
+			}
+		}()
+
+		if err := consumer.Start(); err != nil {
+			return fmt.Errorf("subscribe telemetry processor: %w", err)
+		}
+
+		logger.Info("telemetry processor ready", "subject", cfg.TelemetrySubject)
+	}
+
+	router := httpapi.NewRouter(logger, publisher, cfg.TelemetrySubject, repository)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,

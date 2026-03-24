@@ -39,11 +39,30 @@ curl -X POST http://localhost:8080/v1/telemetry/ingest \
 ./scripts/bootstrap_timescaledb.sh
 ```
 
-5. Ejecutar prueba E2E HTTP -> NATS:
+5. Cargar seed sintetico (100 equipos):
+
+```bash
+./scripts/seed_synthetic_data.sh
+```
+
+6. Ejecutar prueba E2E HTTP -> NATS:
 
 ```bash
 cd backend/services/ingest-api
 make e2e
+```
+
+7. Ejecutar simulador ASIC (100 equipos):
+
+```bash
+cd backend/services/ingest-api
+make simulate
+```
+
+8. Verificacion E2E completa (simulador -> DB -> API):
+
+```bash
+./scripts/e2e_simulator_db_api.sh
 ```
 
 ## CI

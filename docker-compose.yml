@@ -10,6 +10,8 @@ services:
       LOG_LEVEL: info
       NATS_URL: nats://nats:4222
       TELEMETRY_SUBJECT: telemetry.raw.v1
+      DATABASE_URL: postgres://postgres:postgres@timescaledb:5432/mining?sslmode=disable
+      TELEMETRY_PROCESSOR_ENABLED: "true"
     ports:
       - "8080:8080"
     depends_on:
