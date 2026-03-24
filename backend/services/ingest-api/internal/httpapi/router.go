@@ -14,13 +14,14 @@ func NewRouter(
 	publisher telemetry.Publisher,
 	telemetrySubject string,
 	repository storage.Repository,
+	ingestMaxBodyBytes int64,
 ) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(RequestIDMiddleware())
 	router.Use(AccessLogMiddleware(logger))
 
-	telemetryHandler := NewTelemetryHandler(logger, publisher, telemetrySubject)
+	telemetryHandler := NewTelemetryHandler(logger, publisher, telemetrySubject, ingestMaxBodyBytes)
 	telemetryReadHandler := NewTelemetryReadHandler(logger, repository)
 
 	router.GET("/healthz", func(c *gin.Context) {

@@ -27,13 +27,16 @@ const (
 )
 
 type config struct {
-	APIURL      string
-	Duration    time.Duration
-	Tick        time.Duration
-	Miners      int
-	SiteCount   int
-	Concurrency int
-	Timeout     time.Duration
+	APIURL         string
+	Duration       time.Duration
+	Tick           time.Duration
+	Miners         int
+	SiteCount      int
+	Concurrency    int
+	Timeout        time.Duration
+	ProfileMode    string
+	Schedule       string
+	ScheduleJitter time.Duration
 }
 
 type failureMode string
@@ -48,6 +51,7 @@ type minerState struct {
 	SiteID    string
 	RackID    string
 	MinerID   string
+	Model     string
 	Firmware  string
 	BaseHash  float64
 	BasePower float64
@@ -58,6 +62,7 @@ type minerState struct {
 	failure      failureMode
 	failureTicks int
 	rng          *rand.Rand
+	failureBias  float64
 }
 
 type tickStats struct {
@@ -72,7 +77,7 @@ func main() {
 		log.Fatalf("invalid config: %v", err)
 	}
 
-	fleet := buildFleet(cfg.Miners, cfg.SiteCount)
+	fleet := buildFleet(cfg.Miners, cfg.SiteCount, cfg.ProfileMode)
 	client := &http.Client{Timeout: cfg.Timeout}
 
 	log.Printf(
@@ -121,6 +126,9 @@ func loadConfig() config {
 	flag.IntVar(&cfg.SiteCount, "sites", defaultSiteCount, "Number of sites to distribute miners")
 	flag.IntVar(&cfg.Concurrency, "concurrency", defaultConcurrency, "Concurrent HTTP requests per tick")
 	flag.DurationVar(&cfg.Timeout, "timeout", 5*time.Second, "HTTP timeout per request")
+	flag.StringVar(&cfg.ProfileMode, "profile-mode", "mixed", "ASIC profile mode: mixed|s19xp|s21|m50")
+	flag.StringVar(&cfg.Schedule, "schedule", "staggered", "Emission scheduler mode: burst|staggered")
+	flag.DurationVar(&cfg.ScheduleJitter, "schedule-jitter", 250*time.Millisecond, "Max random jitter applied to scheduled emissions")
 	flag.Parse()
 	return cfg
 }
@@ -144,6 +152,15 @@ func validateConfig(cfg config) error {
 	if cfg.Timeout <= 0 {
 		return fmt.Errorf("timeout must be > 0")
 	}
+	if _, err := profileByMode(cfg.ProfileMode, 1); err != nil {
+		return err
+	}
+	if cfg.Schedule != "burst" && cfg.Schedule != "staggered" {
+		return fmt.Errorf("schedule must be burst or staggered")
+	}
+	if cfg.ScheduleJitter < 0 {
+		return fmt.Errorf("schedule-jitter must be >= 0")
+	}
 	return nil
 }
 
@@ -152,11 +169,15 @@ func runTick(client *http.Client, cfg config, fleet []*minerState, tick int, tim
 	var wg sync.WaitGroup
 	limiter := make(chan struct{}, cfg.Concurrency)
 
-	for _, miner := range fleet {
+	for index, miner := range fleet {
+		index := index
 		miner := miner
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			if wait := scheduleEmissionWait(cfg, timestamp, len(fleet), index, miner); wait > 0 {
+				time.Sleep(wait)
+			}
 			limiter <- struct{}{}
 			defer func() { <-limiter }()
 
@@ -175,7 +196,7 @@ func runTick(client *http.Client, cfg config, fleet []*minerState, tick int, tim
 	return stats
 }
 
-func buildFleet(miners, siteCount int) []*minerState {
+func buildFleet(miners, siteCount int, profileMode string) []*minerState {
 	fleet := make([]*minerState, 0, miners)
 	minersPerSite := int(math.Ceil(float64(miners) / float64(siteCount)))
 	racksPerSite := 5
@@ -199,26 +220,29 @@ func buildFleet(miners, siteCount int) []*minerState {
 		seed := time.Now().UnixNano() + int64(index*7919)
 		rng := rand.New(rand.NewSource(seed))
 
-		baseHash := 130 + rng.Float64()*55
-		basePower := 2900 + rng.Float64()*900
-		baseTemp := 54 + rng.Float64()*7
-		baseFan := 5100 + rng.Intn(950)
-		firmware := "braiins-2026.1"
-		if index%3 == 0 {
-			firmware = "stock-2025.11"
+		profile, err := profileByMode(profileMode, index)
+		if err != nil {
+			log.Fatalf("select profile: %v", err)
 		}
+		baseHash := profile.HashMinTHs + rng.Float64()*(profile.HashMaxTHs-profile.HashMinTHs)
+		basePower := profile.PowerMinW + rng.Float64()*(profile.PowerMaxW-profile.PowerMinW)
+		baseTemp := profile.TempMinC + rng.Float64()*(profile.TempMaxC-profile.TempMinC)
+		baseFan := profile.FanMinRPM + rng.Intn(max(1, profile.FanMaxRPM-profile.FanMinRPM+1))
+		firmware := profile.Firmware
 
 		fleet = append(fleet, &minerState{
-			SiteID:    siteID,
-			RackID:    rackID,
-			MinerID:   minerID,
-			Firmware:  firmware,
-			BaseHash:  baseHash,
-			BasePower: basePower,
-			BaseTemp:  baseTemp,
-			BaseFan:   baseFan,
-			Phase:     rng.Float64() * math.Pi,
-			rng:       rng,
+			SiteID:      siteID,
+			RackID:      rackID,
+			MinerID:     minerID,
+			Model:       profile.Model,
+			Firmware:    firmware,
+			BaseHash:    baseHash,
+			BasePower:   basePower,
+			BaseTemp:    baseTemp,
+			BaseFan:     baseFan,
+			Phase:       rng.Float64() * math.Pi,
+			rng:         rng,
+			failureBias: profile.FailureBias,
 		})
 	}
 
@@ -236,7 +260,7 @@ func (m *minerState) buildPayload(tick int, ts time.Time) map[string]any {
 	fault := string(failureNone)
 
 	if m.failureTicks == 0 {
-		r := m.rng.Float64()
+		r := m.rng.Float64() * m.failureBias
 		switch {
 		case r < 0.003:
 			m.failure = failureOverheat
@@ -324,8 +348,39 @@ func (m *minerState) buildPayload(tick int, ts time.Time) map[string]any {
 			"fault":       fault,
 			"profile":     "asic-v1",
 			"sim_version": "2026.03",
+			"asic_model":  m.Model,
 		},
 	}
+}
+
+func scheduleEmissionWait(cfg config, tickStartedAt time.Time, fleetSize, minerIndex int, miner *minerState) time.Duration {
+	if cfg.Schedule != "staggered" || fleetSize <= 1 || cfg.Tick <= 0 {
+		return randomJitter(miner, cfg.ScheduleJitter)
+	}
+
+	baseWindow := cfg.Tick
+	if baseWindow > 2*time.Second {
+		baseWindow = 2 * time.Second
+	}
+	offsetStep := baseWindow / time.Duration(fleetSize)
+	if offsetStep <= 0 {
+		offsetStep = time.Millisecond
+	}
+
+	plannedAt := tickStartedAt.Add(offsetStep * time.Duration(minerIndex))
+	wait := time.Until(plannedAt) + randomJitter(miner, cfg.ScheduleJitter)
+	if wait < 0 {
+		return 0
+	}
+
+	return wait
+}
+
+func randomJitter(miner *minerState, maxJitter time.Duration) time.Duration {
+	if miner == nil || maxJitter <= 0 {
+		return 0
+	}
+	return time.Duration(miner.rng.Int63n(maxJitter.Nanoseconds() + 1))
 }
 
 func postTelemetry(client *http.Client, apiURL string, payload map[string]any) error {
@@ -377,4 +432,11 @@ func clampInt(value, minValue, maxValue int) int {
 func round(value float64, decimals int) float64 {
 	multiplier := math.Pow(10, float64(decimals))
 	return math.Round(value*multiplier) / multiplier
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

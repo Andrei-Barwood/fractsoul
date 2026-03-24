@@ -19,7 +19,8 @@ func Run(ctx context.Context, cfg Config) error {
 	logger := observability.NewLogger(cfg.LogLevel)
 	gin.SetMode(cfg.GinMode)
 
-	publisher, err := telemetry.NewNATSPublisher(cfg.NATSURL)
+	streamSubjects := []string{cfg.TelemetrySubject, cfg.TelemetryDLQSubject}
+	publisher, err := telemetry.NewNATSPublisher(cfg.NATSURL, cfg.TelemetryStream, streamSubjects)
 	if err != nil {
 		return fmt.Errorf("connect nats: %w", err)
 	}
@@ -32,7 +33,9 @@ func Run(ctx context.Context, cfg Config) error {
 	logger.Info(
 		"nats publisher ready",
 		"nats_url", cfg.NATSURL,
+		"stream", cfg.TelemetryStream,
 		"subject", cfg.TelemetrySubject,
+		"dlq_subject", cfg.TelemetryDLQSubject,
 	)
 
 	var repository storage.Repository
@@ -48,7 +51,16 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	if repository != nil && cfg.ProcessorEnabled {
-		consumer, err := processor.NewConsumer(logger, repository, cfg.NATSURL, cfg.TelemetrySubject)
+		consumerCfg := processor.Config{
+			Subject:    cfg.TelemetrySubject,
+			StreamName: cfg.TelemetryStream,
+			Durable:    cfg.ConsumerDurable,
+			DLQSubject: cfg.TelemetryDLQSubject,
+			MaxDeliver: cfg.ProcessorMaxDeliver,
+			RetryDelay: cfg.ProcessorRetryDelay,
+		}
+
+		consumer, err := processor.NewConsumer(logger, repository, cfg.NATSURL, consumerCfg)
 		if err != nil {
 			return fmt.Errorf("start telemetry processor: %w", err)
 		}
@@ -62,10 +74,18 @@ func Run(ctx context.Context, cfg Config) error {
 			return fmt.Errorf("subscribe telemetry processor: %w", err)
 		}
 
-		logger.Info("telemetry processor ready", "subject", cfg.TelemetrySubject)
+		logger.Info(
+			"telemetry processor ready",
+			"stream", cfg.TelemetryStream,
+			"subject", cfg.TelemetrySubject,
+			"durable", cfg.ConsumerDurable,
+			"dlq_subject", cfg.TelemetryDLQSubject,
+			"max_deliver", cfg.ProcessorMaxDeliver,
+			"retry_delay", cfg.ProcessorRetryDelay.String(),
+		)
 	}
 
-	router := httpapi.NewRouter(logger, publisher, cfg.TelemetrySubject, repository)
+	router := httpapi.NewRouter(logger, publisher, cfg.TelemetrySubject, repository, cfg.IngestMaxBodyBytes)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,

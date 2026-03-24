@@ -2,40 +2,60 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"log/slog"
+	"mime"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/telemetry"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
-const maxFutureTimestampSkew = 5 * time.Minute
+const (
+	maxFutureTimestampSkew   = 5 * time.Minute
+	defaultIngestMaxBodySize = 1 << 20 // 1 MiB
+)
 
 type TelemetryHandler struct {
-	logger    *slog.Logger
-	publisher telemetry.Publisher
-	subject   string
+	logger       *slog.Logger
+	publisher    telemetry.Publisher
+	subject      string
+	maxBodyBytes int64
 }
 
-func NewTelemetryHandler(logger *slog.Logger, publisher telemetry.Publisher, subject string) *TelemetryHandler {
+func NewTelemetryHandler(logger *slog.Logger, publisher telemetry.Publisher, subject string, maxBodyBytes int64) *TelemetryHandler {
+	if maxBodyBytes <= 0 {
+		maxBodyBytes = defaultIngestMaxBodySize
+	}
+
 	return &TelemetryHandler{
-		logger:    logger,
-		publisher: publisher,
-		subject:   subject,
+		logger:       logger,
+		publisher:    publisher,
+		subject:      subject,
+		maxBodyBytes: maxBodyBytes,
 	}
 }
 
 func (h *TelemetryHandler) Ingest(c *gin.Context) {
-	var request telemetry.IngestRequest
-	if err := c.ShouldBindJSON(&request); err != nil {
+	if !isJSONContentType(c.GetHeader("Content-Type")) {
 		WriteError(
 			c,
-			http.StatusBadRequest,
-			"validation_error",
-			"payload validation failed",
-			ValidationDetails(err),
+			http.StatusUnsupportedMediaType,
+			"unsupported_media_type",
+			"content type must be application/json",
+			map[string]string{"expected": "application/json"},
 		)
+		return
+	}
+
+	request, ingestErr := h.decodeAndValidateRequest(c)
+	if ingestErr != nil {
+		WriteError(c, ingestErr.Status, ingestErr.Code, ingestErr.Message, ingestErr.Details)
 		return
 	}
 
@@ -118,4 +138,112 @@ func (h *TelemetryHandler) Ingest(c *gin.Context) {
 	)
 
 	c.JSON(http.StatusAccepted, response)
+}
+
+type ingestError struct {
+	Status  int
+	Code    string
+	Message string
+	Details any
+}
+
+func (h *TelemetryHandler) decodeAndValidateRequest(c *gin.Context) (telemetry.IngestRequest, *ingestError) {
+	var request telemetry.IngestRequest
+
+	bodyReader := http.MaxBytesReader(c.Writer, c.Request.Body, h.maxBodyBytes)
+	defer bodyReader.Close()
+
+	decoder := json.NewDecoder(bodyReader)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&request); err != nil {
+		return telemetry.IngestRequest{}, classifyDecodeError(err, h.maxBodyBytes)
+	}
+
+	// Ensure payload contains a single JSON object.
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return telemetry.IngestRequest{}, &ingestError{
+			Status:  http.StatusBadRequest,
+			Code:    "invalid_json",
+			Message: "payload must contain a single JSON object",
+		}
+	}
+
+	if err := binding.Validator.ValidateStruct(request); err != nil {
+		return telemetry.IngestRequest{}, &ingestError{
+			Status:  http.StatusBadRequest,
+			Code:    "validation_error",
+			Message: "payload validation failed",
+			Details: ValidationDetails(err),
+		}
+	}
+
+	return request, nil
+}
+
+func classifyDecodeError(err error, maxBodyBytes int64) *ingestError {
+	var syntaxErr *json.SyntaxError
+	var maxBytesErr *http.MaxBytesError
+	var unmarshalTypeErr *json.UnmarshalTypeError
+
+	switch {
+	case errors.Is(err, io.EOF):
+		return &ingestError{
+			Status:  http.StatusBadRequest,
+			Code:    "invalid_json",
+			Message: "payload body is empty",
+		}
+	case errors.As(err, &maxBytesErr):
+		return &ingestError{
+			Status:  http.StatusRequestEntityTooLarge,
+			Code:    "payload_too_large",
+			Message: "payload exceeds maximum allowed size",
+			Details: map[string]string{"max_bytes": strconv.FormatInt(maxBodyBytes, 10)},
+		}
+	case errors.As(err, &syntaxErr):
+		return &ingestError{
+			Status:  http.StatusBadRequest,
+			Code:    "invalid_json",
+			Message: "payload JSON is malformed",
+			Details: map[string]string{"offset": strconv.FormatInt(syntaxErr.Offset, 10)},
+		}
+	case errors.As(err, &unmarshalTypeErr):
+		field := strings.TrimSpace(unmarshalTypeErr.Field)
+		if field == "" {
+			field = "unknown"
+		}
+		return &ingestError{
+			Status:  http.StatusBadRequest,
+			Code:    "invalid_json",
+			Message: "payload has invalid field types",
+			Details: map[string]string{
+				"field":    field,
+				"expected": unmarshalTypeErr.Type.String(),
+			},
+		}
+	case strings.HasPrefix(err.Error(), "json: unknown field "):
+		field := strings.TrimPrefix(err.Error(), "json: unknown field ")
+		field = strings.Trim(field, "\"")
+		return &ingestError{
+			Status:  http.StatusBadRequest,
+			Code:    "invalid_json",
+			Message: "payload contains unknown fields",
+			Details: map[string]string{"field": field},
+		}
+	default:
+		return &ingestError{
+			Status:  http.StatusBadRequest,
+			Code:    "invalid_json",
+			Message: "payload JSON is invalid",
+			Details: map[string]string{"reason": err.Error()},
+		}
+	}
+}
+
+func isJSONContentType(contentType string) bool {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false
+	}
+	return mediaType == "application/json"
 }

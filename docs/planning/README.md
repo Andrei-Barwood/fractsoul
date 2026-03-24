@@ -1,4 +1,4 @@
-# MVP Bitcoin Mining - Kickoff D1-D30
+# MVP Bitcoin Mining - Kickoff D1-D37
 
 ## Estado
 - [x] D1: Objetivo del MVP, alcance y no-objetivos
@@ -31,6 +31,13 @@
 - [x] D28: Preparar demo tecnica interna S1
 - [x] D29: Ejecutar demo + documentar hallazgos
 - [x] D30: Retro S1 + plan detallado S2
+- [x] D31: Definir objetivo de sprint S2 y criterios de exito
+- [x] D32: Mejorar simulador con perfiles por modelo ASIC
+- [x] D33: Agregar scheduler de emision de eventos
+- [x] D34: Implementar servicio de ingesta real
+- [x] D35: Validacion de payloads + manejo de errores
+- [x] D36: Cola de reintentos y dead-letter basico
+- [x] D37: Revision semanal + ajuste de prioridades
 
 ## Navegacion
 - [D1 Objetivo y Alcance](./D1_objetivo_alcance.md)
@@ -63,8 +70,15 @@
 - [D28 Preparar demo tecnica interna S1](./D28_preparar_demo_tecnica_interna_s1.md)
 - [D29 Ejecutar demo y documentar hallazgos](./D29_ejecutar_demo_documentar_hallazgos.md)
 - [D30 Retro S1 y plan S2](./D30_retro_s1_plan_detallado_s2.md)
+- [D31 Objetivo sprint S2 y criterios de exito](./D31_objetivo_sprint_s2_criterios_exito.md)
+- [D32 Simulador con perfiles ASIC](./D32_simulador_perfiles_modelo_asic.md)
+- [D33 Scheduler de emision de eventos](./D33_scheduler_emision_eventos.md)
+- [D34 Servicio de ingesta real](./D34_servicio_ingesta_real.md)
+- [D35 Validacion de payloads y errores](./D35_validacion_payloads_manejo_errores.md)
+- [D36 Retry queue y dead-letter basico](./D36_cola_reintentos_dead_letter_basico.md)
+- [D37 Revision semanal y prioridades](./D37_revision_semanal_ajuste_prioridades.md)
 
 ## Siguiente ejecucion sugerida (S2)
-- Evolucionar publicacion/consumo a NATS JetStream durable (retry/backoff/DLQ).
-- Instrumentar metricas Prometheus y trazas OTel en ingesta, consumer y read API.
-- Implementar seguridad baseline (API keys + rate limiting por sitio).
+- D38-D40: optimizacion de datos en Timescale (indices, retencion, agregaciones continuas).
+- D41-D42: evolucion de read API (filtros por sitio/rack y rango por maquina).
+- D43: performance test 100 ASICs con umbrales y hallazgos documentados.

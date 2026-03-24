@@ -4,10 +4,10 @@ Monorepo base para el MVP de operacion de granjas de Bitcoin mining.
 
 ## Estructura
 
-- `backend/services/ingest-api`: API mock de ingesta de telemetria (Go + Gin).
+- `backend/services/ingest-api`: servicio de ingesta + lectura de telemetria (Go + Gin + NATS + Postgres).
 - `frontend/apps/dashboard`: placeholder de UI operativa.
 - `infra/docker`: recursos de contenedores para desarrollo local.
-- `docs/planning`: documentos D1-D14 y ADRs.
+- `docs/planning`: documentos de ejecucion D1-D37 y ADRs.
 - `docs/contracts`: contratos JSON/schema.
 - `docs/engineering`: convenciones tecnicas.
 
@@ -25,7 +25,7 @@ docker compose up --build
 curl http://localhost:8080/healthz
 ```
 
-3. Probar endpoint mock de ingesta:
+3. Probar endpoint de ingesta:
 
 ```bash
 curl -X POST http://localhost:8080/v1/telemetry/ingest \

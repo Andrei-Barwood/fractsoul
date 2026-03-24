@@ -82,7 +82,7 @@ func (r *stubRepository) Close() {}
 func buildTestRouter() (http.Handler, *stubPublisher) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	publisher := &stubPublisher{}
-	return NewRouter(logger, publisher, "telemetry.raw.v1", nil), publisher
+	return NewRouter(logger, publisher, "telemetry.raw.v1", nil, 1<<20), publisher
 }
 
 func TestIngestAcceptsValidPayload(t *testing.T) {
@@ -177,6 +177,100 @@ func TestIngestRejectsInvalidPayload(t *testing.T) {
 	}
 }
 
+func TestIngestRejectsUnsupportedMediaType(t *testing.T) {
+	router, _ := buildTestRouter()
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/telemetry/ingest", bytes.NewBufferString(`{"event_id":"x"}`))
+	req.Header.Set("Content-Type", "text/plain")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusUnsupportedMediaType, resp.Code, resp.Body.String())
+	}
+
+	if !strings.Contains(resp.Body.String(), "unsupported_media_type") {
+		t.Fatalf("expected unsupported_media_type in response, got %s", resp.Body.String())
+	}
+}
+
+func TestIngestRejectsUnknownField(t *testing.T) {
+	router, _ := buildTestRouter()
+
+	payload := `{
+		"event_id":"550e8400-e29b-41d4-a716-446655440000",
+		"timestamp":"2026-03-22T14:00:00Z",
+		"site_id":"site-cl-01",
+		"rack_id":"rack-a1",
+		"miner_id":"asic-0001",
+		"metrics":{
+			"hashrate_ths":126.5,
+			"power_watts":3325,
+			"temp_celsius":71.2,
+			"fan_rpm":6400,
+			"efficiency_jth":26.3,
+			"status":"ok"
+		},
+		"unexpected_field":"nope"
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/telemetry/ingest", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusBadRequest, resp.Code, resp.Body.String())
+	}
+
+	if !strings.Contains(resp.Body.String(), "invalid_json") {
+		t.Fatalf("expected invalid_json in response, got %s", resp.Body.String())
+	}
+	if !strings.Contains(resp.Body.String(), "unexpected_field") {
+		t.Fatalf("expected unknown field details in response, got %s", resp.Body.String())
+	}
+}
+
+func TestIngestRejectsPayloadTooLarge(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	publisher := &stubPublisher{}
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", nil, 256)
+
+	largeTag := strings.Repeat("a", 1024)
+	payload := `{
+		"event_id":"550e8400-e29b-41d4-a716-446655440000",
+		"timestamp":"2026-03-22T14:00:00Z",
+		"site_id":"site-cl-01",
+		"rack_id":"rack-a1",
+		"miner_id":"asic-0001",
+		"metrics":{
+			"hashrate_ths":126.5,
+			"power_watts":3325,
+			"temp_celsius":71.2,
+			"fan_rpm":6400,
+			"efficiency_jth":26.3,
+			"status":"ok"
+		},
+		"tags":{"blob":"` + largeTag + `"}
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/telemetry/ingest", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusRequestEntityTooLarge, resp.Code, resp.Body.String())
+	}
+
+	if !strings.Contains(resp.Body.String(), "payload_too_large") {
+		t.Fatalf("expected payload_too_large in response, got %s", resp.Body.String())
+	}
+}
+
 func TestIngestNormalizesOperationalIDs(t *testing.T) {
 	router, publisher := buildTestRouter()
 
@@ -265,7 +359,7 @@ func TestIngestRejectsFutureTimestamp(t *testing.T) {
 func TestIngestReturnsDependencyErrorWhenPublishFails(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	publisher := &stubPublisher{publishErr: errors.New("nats unavailable")}
-	router := NewRouter(logger, publisher, "telemetry.raw.v1", nil)
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", nil, 1<<20)
 
 	payload := `{
 		"event_id":"550e8400-e29b-41d4-a716-446655440000",
@@ -337,7 +431,7 @@ func TestReadingsReturnsItems(t *testing.T) {
 			},
 		},
 	}
-	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo)
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/telemetry/readings?site_id=SITE-CL-1&limit=10", nil)
 	resp := httptest.NewRecorder()
@@ -375,7 +469,7 @@ func TestSummaryReturnsOK(t *testing.T) {
 			AvgEfficiencyJTH: 26.1,
 		},
 	}
-	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo)
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/telemetry/summary?window_minutes=120", nil)
 	resp := httptest.NewRecorder()
