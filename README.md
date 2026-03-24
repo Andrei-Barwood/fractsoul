@@ -95,6 +95,13 @@ make simulate
 ./scripts/demo_s2_fallas_simuladas.sh
 ```
 
+13. Consultar eficiencia/anomalias (S3):
+
+```bash
+curl "http://localhost:8080/v1/efficiency/miners?window_minutes=120&limit=5"
+curl "http://localhost:8080/v1/anomalies/miners/asic-000001/analyze?resolution=minute&limit=120"
+```
+
 ## CI
 
 La pipeline minima corre en `.github/workflows/ci.yml` e incluye:

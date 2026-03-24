@@ -1,0 +1,60 @@
+{
+  "request_id": "10f8f4c7-5a35-4ad4-a47f-0a4e60ddfb38",
+  "summary_line": "miner=asic-000001 model=S21 severity=high score=78.3 hotspot=true hash_degradation=true",
+  "report": {
+    "miner_id": "asic-000001",
+    "site_id": "site-cl-01",
+    "rack_id": "rack-cl-01-01",
+    "miner_model": "S21",
+    "window_from": "2026-03-24T12:00:00Z",
+    "window_to": "2026-03-24T15:00:00Z",
+    "features": {
+      "samples": 180,
+      "avg_hashrate_ths": 164.2,
+      "avg_power_watts": 3510.7,
+      "avg_temp_celsius": 92.5,
+      "max_temp_celsius": 101.8,
+      "avg_fan_rpm": 7180,
+      "avg_efficiency_jth": 21.4,
+      "hashrate_drop_pct": 0.21,
+      "hashrate_trend_ths_per_hour": -14.9,
+      "temp_trend_c_per_hour": 2.4,
+      "power_trend_w_per_hour": 6.1,
+      "ambient_celsius": 30.6,
+      "compensated_jth": 20.6,
+      "thermal_band": "hotspot"
+    },
+    "hotspot": {
+      "id": "hotspot_thermal",
+      "name": "Hotspot termico",
+      "triggered": true,
+      "score": 81.2
+    },
+    "hash_degradation": {
+      "id": "hash_degradation_progressive",
+      "name": "Degradacion progresiva de hash",
+      "triggered": true,
+      "score": 72.8
+    },
+    "severity_score": 78.3,
+    "severity_label": "high",
+    "probable_cause": "Probable throttling termico sostenido: temperatura alta y caida de hashrate en paralelo.",
+    "recommendations": [
+      {
+        "parameter": "fan",
+        "suggested_delta": "+12%",
+        "reason": "Aumentar evacuacion termica y reducir tiempo en banda hotspot."
+      },
+      {
+        "parameter": "freq",
+        "suggested_delta": "-6%",
+        "reason": "Disminuir carga termica para estabilizar la maquina."
+      },
+      {
+        "parameter": "volt",
+        "suggested_delta": "-15mV",
+        "reason": "Reducir disipacion sin sacrificar estabilidad base."
+      }
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "request_id": "4f87d322-39cf-4f0a-9633-2d583ca6809a",
+  "count": 1,
+  "items": [
+    {
+      "site_id": "site-cl-01",
+      "rack_id": "rack-cl-01-01",
+      "miner_id": "asic-000001",
+      "miner_model": "S21",
+      "samples": 120,
+      "avg_hashrate_ths": 194.8,
+      "avg_power_watts": 3490.4,
+      "avg_temp_celsius": 76.2,
+      "avg_ambient_celsius": 28.1,
+      "raw_jth": 17.92,
+      "compensated_jth": 17.70,
+      "baseline_jth": 17.8,
+      "delta_pct": -0.56,
+      "thermal_band": "optimal",
+      "last_seen_at": "2026-03-24T15:30:00Z"
+    }
+  ]
+}

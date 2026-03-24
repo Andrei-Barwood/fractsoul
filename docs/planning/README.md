@@ -1,4 +1,4 @@
-# MVP Bitcoin Mining - Kickoff D1-D60
+# MVP Bitcoin Mining - Kickoff D1-D75
 
 ## Estado
 - [x] D1: Objetivo del MVP, alcance y no-objetivos
@@ -61,6 +61,21 @@
 - [x] D58: Validar flujo completo de alertas
 - [x] D59: Demo S2 con casos de fallo simulado
 - [x] D60: Retro S2 + plan detallado S3
+- [x] D61: Definir objetivos S3 (J/TH, anomalias, reporte diario)
+- [x] D62: Implementar modulo de calculo J/TH por equipo
+- [x] D63: Agregar eficiencia agregada por rack
+- [x] D64: Agregar eficiencia agregada por sitio
+- [x] D65: Modelo termico baseline por rango operativo
+- [x] D66: Compensacion por temperatura ambiente
+- [x] D67: Revision semanal + calibracion de metricas
+- [x] D68: Ingenieria de features para anomalias
+- [x] D69: Detector de hotspot termico
+- [x] D70: Detector de degradacion progresiva de hash
+- [x] D71: Score de severidad de anomalia
+- [x] D72: Texto explicativo de causa probable (v1)
+- [x] D73: Validacion con datos simulados y etiquetados
+- [x] D74: Revision semanal + tuning de umbrales
+- [x] D75: Recomendador v1 (freq/volt/fan)
 
 ## Navegacion
 - [D1 Objetivo y Alcance](./D1_objetivo_alcance.md)
@@ -123,8 +138,23 @@
 - [D58 Validacion E2E flujo alertas](./D58_validacion_flujo_alertas_e2e.md)
 - [D59 Demo S2 con fallos simulados](./D59_demo_s2_casos_fallo_simulado.md)
 - [D60 Retro S2 y plan S3](./D60_retro_s2_plan_detallado_s3.md)
+- [D61 Objetivos S3 J/TH, anomalias y reporte diario](./D61_objetivos_s3_jth_anomalias_reporte_diario.md)
+- [D62 Modulo calculo J/TH por equipo](./D62_modulo_calculo_jth_por_equipo.md)
+- [D63 Eficiencia agregada por rack](./D63_eficiencia_agregada_por_rack.md)
+- [D64 Eficiencia agregada por sitio](./D64_eficiencia_agregada_por_sitio.md)
+- [D65 Modelo termico baseline](./D65_modelo_termico_baseline_rango_operativo.md)
+- [D66 Compensacion por temperatura ambiente](./D66_compensacion_temperatura_ambiente.md)
+- [D67 Revision semanal calibracion de metricas](./D67_revision_semanal_calibracion_metricas.md)
+- [D68 Ingenieria de features para anomalias](./D68_ingenieria_features_anomalias.md)
+- [D69 Detector hotspot termico](./D69_detector_hotspot_termico.md)
+- [D70 Detector degradacion progresiva de hash](./D70_detector_degradacion_progresiva_hash.md)
+- [D71 Score de severidad de anomalia](./D71_score_severidad_anomalia.md)
+- [D72 Texto explicativo causa probable v1](./D72_texto_explicativo_causa_probable_v1.md)
+- [D73 Validacion con datos simulados y etiquetados](./D73_validacion_datos_simulados_etiquetados.md)
+- [D74 Revision semanal + tuning de umbrales](./D74_revision_semanal_tuning_umbrales.md)
+- [D75 Recomendador v1 freq/volt/fan](./D75_recomendador_v1_freq_volt_fan.md)
 
 ## Siguiente ejecucion sugerida (S3)
-- Publicar API de alertas (`list/detail/ack/resolve`) con contrato OpenAPI.
-- Implementar outbox y dead-letter de notificaciones para canales webhook/email.
-- Crear dashboard de alertas v1 y playbooks de respuesta operativa.
+- Automatizar reporte diario de eficiencia/anomalias por sitio.
+- Añadir feedback loop de operador para mejorar causa probable/recomendaciones.
+- Evolucionar de reglas estáticas a modelos adaptativos por estación y carga.

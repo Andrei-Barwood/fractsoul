@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Fractsoul Ingest API
-  version: 1.0.0
+  version: 1.1.0
   description: >
     API de ingesta y lectura de telemetria para el MVP de operacion de granja ASIC.
     La autenticacion por API key es configurable via entorno (`API_AUTH_ENABLED`, `API_KEYS`).
@@ -12,6 +12,8 @@ security:
 tags:
   - name: health
   - name: telemetry
+  - name: efficiency
+  - name: anomaly
 paths:
   /healthz:
     get:
@@ -232,6 +234,134 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /v1/efficiency/miners:
+    get:
+      tags: [efficiency]
+      summary: Eficiencia J/TH por equipo
+      parameters:
+        - $ref: '#/components/parameters/site_id'
+        - $ref: '#/components/parameters/rack_id'
+        - $ref: '#/components/parameters/miner_id'
+        - $ref: '#/components/parameters/model'
+        - $ref: '#/components/parameters/window_minutes'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: Eficiencia por equipo obtenida
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  request_id:
+                    type: string
+                    format: uuid
+                  count:
+                    type: integer
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MinerEfficiency'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/efficiency/racks:
+    get:
+      tags: [efficiency]
+      summary: Eficiencia J/TH agregada por rack
+      parameters:
+        - $ref: '#/components/parameters/site_id'
+        - $ref: '#/components/parameters/rack_id'
+        - $ref: '#/components/parameters/model'
+        - $ref: '#/components/parameters/window_minutes'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: Eficiencia por rack obtenida
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  request_id:
+                    type: string
+                    format: uuid
+                  count:
+                    type: integer
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RackEfficiency'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/efficiency/sites:
+    get:
+      tags: [efficiency]
+      summary: Eficiencia J/TH agregada por sitio
+      parameters:
+        - $ref: '#/components/parameters/site_id'
+        - $ref: '#/components/parameters/model'
+        - $ref: '#/components/parameters/window_minutes'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: Eficiencia por sitio obtenida
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  request_id:
+                    type: string
+                    format: uuid
+                  count:
+                    type: integer
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SiteEfficiency'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/anomalies/miners/{miner_id}/analyze:
+    get:
+      tags: [anomaly]
+      summary: Analisis de anomalias para un equipo
+      parameters:
+        - name: miner_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: resolution
+          in: query
+          schema:
+            type: string
+            enum: [minute, hour]
+            default: minute
+        - $ref: '#/components/parameters/from'
+        - $ref: '#/components/parameters/to'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/ambient_c'
+      responses:
+        '200':
+          description: Reporte de anomalias generado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  request_id:
+                    type: string
+                    format: uuid
+                  summary_line:
+                    type: string
+                  report:
+                    $ref: '#/components/schemas/AnomalyReport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -284,6 +414,19 @@ components:
       schema:
         type: integer
         minimum: 1
+    window_minutes:
+      name: window_minutes
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 1440
+        default: 60
+    ambient_c:
+      name: ambient_c
+      in: query
+      schema:
+        type: number
 
   responses:
     Unauthorized:
@@ -396,6 +539,115 @@ components:
         avg_fan_rpm: { type: number }
         avg_efficiency_jth: { type: number }
         critical_events: { type: integer }
+
+    MinerEfficiency:
+      type: object
+      properties:
+        site_id: { type: string }
+        rack_id: { type: string }
+        miner_id: { type: string }
+        miner_model: { type: string }
+        samples: { type: integer }
+        avg_hashrate_ths: { type: number }
+        avg_power_watts: { type: number }
+        avg_temp_celsius: { type: number }
+        avg_ambient_celsius: { type: number }
+        raw_jth: { type: number }
+        compensated_jth: { type: number }
+        baseline_jth: { type: number }
+        delta_pct: { type: number }
+        thermal_band: { type: string }
+        last_seen_at: { type: string, format: date-time }
+
+    RackEfficiency:
+      type: object
+      properties:
+        site_id: { type: string }
+        rack_id: { type: string }
+        miners: { type: integer }
+        samples: { type: integer }
+        avg_hashrate_ths: { type: number }
+        avg_power_watts: { type: number }
+        avg_temp_celsius: { type: number }
+        avg_ambient_celsius: { type: number }
+        raw_jth: { type: number }
+        compensated_jth: { type: number }
+        last_seen_at: { type: string, format: date-time }
+
+    SiteEfficiency:
+      type: object
+      properties:
+        site_id: { type: string }
+        miners: { type: integer }
+        racks: { type: integer }
+        samples: { type: integer }
+        avg_hashrate_ths: { type: number }
+        avg_power_watts: { type: number }
+        avg_temp_celsius: { type: number }
+        avg_ambient_celsius: { type: number }
+        raw_jth: { type: number }
+        compensated_jth: { type: number }
+        last_seen_at: { type: string, format: date-time }
+
+    AnomalyFeatureVector:
+      type: object
+      properties:
+        samples: { type: integer }
+        avg_hashrate_ths: { type: number }
+        avg_power_watts: { type: number }
+        avg_temp_celsius: { type: number }
+        max_temp_celsius: { type: number }
+        avg_fan_rpm: { type: number }
+        avg_efficiency_jth: { type: number }
+        hashrate_drop_pct: { type: number }
+        hashrate_trend_ths_per_hour: { type: number }
+        temp_trend_c_per_hour: { type: number }
+        power_trend_w_per_hour: { type: number }
+        ambient_celsius: { type: number }
+        compensated_jth: { type: number }
+        thermal_band: { type: string }
+
+    AnomalyDetection:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        triggered: { type: boolean }
+        score: { type: number }
+        evidence:
+          type: object
+          additionalProperties:
+            type: number
+
+    AnomalyRecommendation:
+      type: object
+      properties:
+        parameter: { type: string }
+        suggested_delta: { type: string }
+        reason: { type: string }
+
+    AnomalyReport:
+      type: object
+      properties:
+        miner_id: { type: string }
+        site_id: { type: string }
+        rack_id: { type: string }
+        miner_model: { type: string }
+        window_from: { type: string, format: date-time }
+        window_to: { type: string, format: date-time }
+        features:
+          $ref: '#/components/schemas/AnomalyFeatureVector'
+        hotspot:
+          $ref: '#/components/schemas/AnomalyDetection'
+        hash_degradation:
+          $ref: '#/components/schemas/AnomalyDetection'
+        severity_score: { type: number }
+        severity_label: { type: string }
+        probable_cause: { type: string }
+        recommendations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnomalyRecommendation'
 
     ErrorResponse:
       type: object

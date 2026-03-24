@@ -1,0 +1,19 @@
+{
+  "request_id": "438dd4ca-fb10-4d22-97f5-c1f6284c9ce0",
+  "count": 1,
+  "items": [
+    {
+      "site_id": "site-cl-01",
+      "miners": 100,
+      "racks": 10,
+      "samples": 12000,
+      "avg_hashrate_ths": 188.7,
+      "avg_power_watts": 3504.2,
+      "avg_temp_celsius": 80.1,
+      "avg_ambient_celsius": 30.4,
+      "raw_jth": 18.57,
+      "compensated_jth": 18.18,
+      "last_seen_at": "2026-03-24T15:30:00Z"
+    }
+  ]
+}

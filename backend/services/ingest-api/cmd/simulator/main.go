@@ -255,6 +255,10 @@ func buildFleet(miners, siteCount int, profileMode string) []*minerState {
 func (m *minerState) buildPayload(tick int, ts time.Time) map[string]any {
 	load := 0.84 + 0.18*math.Sin((float64(tick)/6.0)+m.Phase) + (m.rng.NormFloat64() * 0.03)
 	load = clamp(load, 0.55, 1.20)
+	ambient := 24 + 5*math.Sin((float64(tick)/14.0)+(m.Phase*0.5)) + (m.rng.NormFloat64() * 0.8)
+	ambient = clamp(ambient, 14, 42)
+	freqMHz := clampInt(700+int(load*140)+int(m.rng.NormFloat64()*8), 520, 980)
+	voltMV := clampInt(730+int(load*75)+int(m.rng.NormFloat64()*6), 640, 940)
 
 	hashrate := m.BaseHash*load + (m.rng.NormFloat64() * 1.7)
 	power := m.BasePower*(0.88+0.24*load) + (m.rng.NormFloat64() * 28)
@@ -283,12 +287,17 @@ func (m *minerState) buildPayload(tick int, ts time.Time) map[string]any {
 			temp += 16 + m.rng.Float64()*10
 			hashrate *= 0.55
 			power *= 1.08
+			ambient += 2 + m.rng.Float64()*2
+			freqMHz = clampInt(freqMHz-35, 520, 980)
+			voltMV = clampInt(voltMV-10, 640, 940)
 			status = "critical"
 			fault = string(failureOverheat)
 		case failureHashDrop:
 			hashrate *= 0.35 + m.rng.Float64()*0.2
 			power *= 0.78 + m.rng.Float64()*0.1
 			temp -= 2 + m.rng.Float64()*3
+			freqMHz = clampInt(freqMHz-18, 520, 980)
+			voltMV = clampInt(voltMV+8, 640, 940)
 			status = "warning"
 			fault = string(failureHashDrop)
 		}
@@ -346,12 +355,15 @@ func (m *minerState) buildPayload(tick int, ts time.Time) map[string]any {
 			"status":         status,
 		},
 		"tags": map[string]string{
-			"source":      "simulator",
-			"load_pct":    fmt.Sprintf("%.2f", load*100),
-			"fault":       fault,
-			"profile":     "asic-v1",
-			"sim_version": "2026.03",
-			"asic_model":  m.Model,
+			"source":         "simulator",
+			"load_pct":       fmt.Sprintf("%.2f", load*100),
+			"fault":          fault,
+			"profile":        "asic-v1",
+			"sim_version":    "2026.03",
+			"asic_model":     m.Model,
+			"ambient_temp_c": fmt.Sprintf("%.2f", ambient),
+			"freq_mhz":       fmt.Sprintf("%d", freqMHz),
+			"volt_mv":        fmt.Sprintf("%d", voltMV),
 		},
 	}
 }

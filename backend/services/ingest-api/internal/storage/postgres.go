@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/alerts"
+	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/efficiency"
 	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/telemetry"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -22,6 +23,8 @@ const (
 	maxQueryLimit      = 500
 	defaultSeriesLimit = 720
 	maxSeriesLimit     = 10000
+	defaultEffLimit    = 100
+	maxEffLimit        = 1000
 )
 
 type PostgresRepository struct {
@@ -899,6 +902,270 @@ LIMIT $4
 	return points, nil
 }
 
+func (r *PostgresRepository) ListMinerEfficiency(ctx context.Context, filter EfficiencyFilter) ([]MinerEfficiency, error) {
+	windowMinutes, limit := normalizeEfficiencyWindowAndLimit(filter.WindowMinutes, filter.Limit)
+
+	ambientExpr := `
+CASE
+  WHEN (tr.tags->>'ambient_temp_c') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (tr.tags->>'ambient_temp_c')::double precision
+  WHEN (tr.tags->>'ambient_c') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (tr.tags->>'ambient_c')::double precision
+  ELSE NULL
+END
+`
+
+	query := `
+SELECT
+  tr.site_id,
+  tr.rack_id,
+  tr.miner_id,
+  COALESCE(m.miner_model, 'unknown') AS miner_model,
+  COUNT(*)::bigint AS samples,
+  COALESCE(AVG(tr.hashrate_ths), 0) AS avg_hashrate_ths,
+  COALESCE(AVG(tr.power_watts), 0) AS avg_power_watts,
+  COALESCE(AVG(tr.temp_celsius), 0) AS avg_temp_celsius,
+  COALESCE(AVG(` + ambientExpr + `), 25) AS avg_ambient_celsius,
+  COALESCE(MAX(tr.ts), NOW()) AS last_seen_at
+FROM telemetry_readings tr
+LEFT JOIN miners m ON m.miner_id = tr.miner_id
+WHERE tr.ts >= NOW() - ($1::int * INTERVAL '1 minute')
+`
+	args := []any{windowMinutes}
+	argPos := 2
+
+	if filter.SiteID != "" {
+		query += fmt.Sprintf(" AND tr.site_id = $%d", argPos)
+		args = append(args, filter.SiteID)
+		argPos++
+	}
+	if filter.RackID != "" {
+		query += fmt.Sprintf(" AND tr.rack_id = $%d", argPos)
+		args = append(args, filter.RackID)
+		argPos++
+	}
+	if filter.MinerID != "" {
+		query += fmt.Sprintf(" AND tr.miner_id = $%d", argPos)
+		args = append(args, filter.MinerID)
+		argPos++
+	}
+	if filter.Model != "" {
+		query += fmt.Sprintf(" AND LOWER(COALESCE(m.miner_model, 'unknown')) = LOWER($%d)", argPos)
+		args = append(args, filter.Model)
+		argPos++
+	}
+
+	query += `
+GROUP BY tr.site_id, tr.rack_id, tr.miner_id, m.miner_model
+`
+	query += fmt.Sprintf(" ORDER BY last_seen_at DESC LIMIT $%d", argPos)
+	args = append(args, limit)
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query miner efficiency: %w", err)
+	}
+	defer rows.Close()
+
+	items := make([]MinerEfficiency, 0, limit)
+	for rows.Next() {
+		var item MinerEfficiency
+		if err := rows.Scan(
+			&item.SiteID,
+			&item.RackID,
+			&item.MinerID,
+			&item.MinerModel,
+			&item.Samples,
+			&item.AvgHashrateTHs,
+			&item.AvgPowerWatts,
+			&item.AvgTempCelsius,
+			&item.AvgAmbientCelsius,
+			&item.LastSeenAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan miner efficiency row: %w", err)
+		}
+
+		baseline := efficiency.BaselineForModel(item.MinerModel)
+		item.RawJTH = efficiency.ComputeJTH(item.AvgPowerWatts, item.AvgHashrateTHs)
+		item.CompensatedJTH = efficiency.CompensateJTH(item.RawJTH, item.AvgAmbientCelsius, baseline)
+		item.BaselineJTH = baseline.NominalJTH
+		item.DeltaPct = efficiency.DeltaPct(item.CompensatedJTH, baseline.NominalJTH)
+		item.ThermalBand = efficiency.ClassifyThermalBand(item.AvgTempCelsius, baseline)
+
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate miner efficiency rows: %w", err)
+	}
+
+	return items, nil
+}
+
+func (r *PostgresRepository) ListRackEfficiency(ctx context.Context, filter EfficiencyFilter) ([]RackEfficiency, error) {
+	windowMinutes, limit := normalizeEfficiencyWindowAndLimit(filter.WindowMinutes, filter.Limit)
+
+	ambientExpr := `
+CASE
+  WHEN (tr.tags->>'ambient_temp_c') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (tr.tags->>'ambient_temp_c')::double precision
+  WHEN (tr.tags->>'ambient_c') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (tr.tags->>'ambient_c')::double precision
+  ELSE NULL
+END
+`
+
+	query := `
+SELECT
+  tr.site_id,
+  tr.rack_id,
+  COUNT(DISTINCT tr.miner_id)::bigint AS miners,
+  COUNT(*)::bigint AS samples,
+  COALESCE(AVG(tr.hashrate_ths), 0) AS avg_hashrate_ths,
+  COALESCE(AVG(tr.power_watts), 0) AS avg_power_watts,
+  COALESCE(AVG(tr.temp_celsius), 0) AS avg_temp_celsius,
+  COALESCE(AVG(` + ambientExpr + `), 25) AS avg_ambient_celsius,
+  COALESCE(MAX(tr.ts), NOW()) AS last_seen_at
+FROM telemetry_readings tr
+LEFT JOIN miners m ON m.miner_id = tr.miner_id
+WHERE tr.ts >= NOW() - ($1::int * INTERVAL '1 minute')
+`
+	args := []any{windowMinutes}
+	argPos := 2
+
+	if filter.SiteID != "" {
+		query += fmt.Sprintf(" AND tr.site_id = $%d", argPos)
+		args = append(args, filter.SiteID)
+		argPos++
+	}
+	if filter.RackID != "" {
+		query += fmt.Sprintf(" AND tr.rack_id = $%d", argPos)
+		args = append(args, filter.RackID)
+		argPos++
+	}
+	if filter.Model != "" {
+		query += fmt.Sprintf(" AND LOWER(COALESCE(m.miner_model, 'unknown')) = LOWER($%d)", argPos)
+		args = append(args, filter.Model)
+		argPos++
+	}
+
+	query += `
+GROUP BY tr.site_id, tr.rack_id
+`
+	query += fmt.Sprintf(" ORDER BY last_seen_at DESC LIMIT $%d", argPos)
+	args = append(args, limit)
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query rack efficiency: %w", err)
+	}
+	defer rows.Close()
+
+	items := make([]RackEfficiency, 0, limit)
+	for rows.Next() {
+		var item RackEfficiency
+		if err := rows.Scan(
+			&item.SiteID,
+			&item.RackID,
+			&item.Miners,
+			&item.Samples,
+			&item.AvgHashrateTHs,
+			&item.AvgPowerWatts,
+			&item.AvgTempCelsius,
+			&item.AvgAmbientCelsius,
+			&item.LastSeenAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan rack efficiency row: %w", err)
+		}
+
+		baseline := efficiency.BaselineForModel(filter.Model)
+		item.RawJTH = efficiency.ComputeJTH(item.AvgPowerWatts, item.AvgHashrateTHs)
+		item.CompensatedJTH = efficiency.CompensateJTH(item.RawJTH, item.AvgAmbientCelsius, baseline)
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate rack efficiency rows: %w", err)
+	}
+
+	return items, nil
+}
+
+func (r *PostgresRepository) ListSiteEfficiency(ctx context.Context, filter EfficiencyFilter) ([]SiteEfficiency, error) {
+	windowMinutes, limit := normalizeEfficiencyWindowAndLimit(filter.WindowMinutes, filter.Limit)
+
+	ambientExpr := `
+CASE
+  WHEN (tr.tags->>'ambient_temp_c') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (tr.tags->>'ambient_temp_c')::double precision
+  WHEN (tr.tags->>'ambient_c') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (tr.tags->>'ambient_c')::double precision
+  ELSE NULL
+END
+`
+
+	query := `
+SELECT
+  tr.site_id,
+  COUNT(DISTINCT tr.miner_id)::bigint AS miners,
+  COUNT(DISTINCT tr.rack_id)::bigint AS racks,
+  COUNT(*)::bigint AS samples,
+  COALESCE(AVG(tr.hashrate_ths), 0) AS avg_hashrate_ths,
+  COALESCE(AVG(tr.power_watts), 0) AS avg_power_watts,
+  COALESCE(AVG(tr.temp_celsius), 0) AS avg_temp_celsius,
+  COALESCE(AVG(` + ambientExpr + `), 25) AS avg_ambient_celsius,
+  COALESCE(MAX(tr.ts), NOW()) AS last_seen_at
+FROM telemetry_readings tr
+LEFT JOIN miners m ON m.miner_id = tr.miner_id
+WHERE tr.ts >= NOW() - ($1::int * INTERVAL '1 minute')
+`
+	args := []any{windowMinutes}
+	argPos := 2
+
+	if filter.SiteID != "" {
+		query += fmt.Sprintf(" AND tr.site_id = $%d", argPos)
+		args = append(args, filter.SiteID)
+		argPos++
+	}
+	if filter.Model != "" {
+		query += fmt.Sprintf(" AND LOWER(COALESCE(m.miner_model, 'unknown')) = LOWER($%d)", argPos)
+		args = append(args, filter.Model)
+		argPos++
+	}
+
+	query += `
+GROUP BY tr.site_id
+`
+	query += fmt.Sprintf(" ORDER BY last_seen_at DESC LIMIT $%d", argPos)
+	args = append(args, limit)
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query site efficiency: %w", err)
+	}
+	defer rows.Close()
+
+	items := make([]SiteEfficiency, 0, limit)
+	for rows.Next() {
+		var item SiteEfficiency
+		if err := rows.Scan(
+			&item.SiteID,
+			&item.Miners,
+			&item.Racks,
+			&item.Samples,
+			&item.AvgHashrateTHs,
+			&item.AvgPowerWatts,
+			&item.AvgTempCelsius,
+			&item.AvgAmbientCelsius,
+			&item.LastSeenAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan site efficiency row: %w", err)
+		}
+
+		baseline := efficiency.BaselineForModel(filter.Model)
+		item.RawJTH = efficiency.ComputeJTH(item.AvgPowerWatts, item.AvgHashrateTHs)
+		item.CompensatedJTH = efficiency.CompensateJTH(item.RawJTH, item.AvgAmbientCelsius, baseline)
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate site efficiency rows: %w", err)
+	}
+
+	return items, nil
+}
+
 func (r *PostgresRepository) listMinerSeriesFromRaw(
 	ctx context.Context,
 	filter MinerSeriesFilter,
@@ -1005,6 +1272,24 @@ func parseLoadPct(tags map[string]string) float64 {
 	}
 
 	return 100
+}
+
+func normalizeEfficiencyWindowAndLimit(windowMinutes, limit int) (int, int) {
+	if windowMinutes <= 0 {
+		windowMinutes = 60
+	}
+	if windowMinutes > 24*60 {
+		windowMinutes = 24 * 60
+	}
+
+	if limit <= 0 {
+		limit = defaultEffLimit
+	}
+	if limit > maxEffLimit {
+		limit = maxEffLimit
+	}
+
+	return windowMinutes, limit
 }
 
 func inferCountryCode(siteID string) string {

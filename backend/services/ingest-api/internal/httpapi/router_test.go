@@ -56,12 +56,19 @@ type stubRepository struct {
 	items              []storage.TelemetryReading
 	summary            storage.TelemetrySummary
 	series             []storage.MinerSeriesPoint
+	minerEfficiency    []storage.MinerEfficiency
+	rackEfficiency     []storage.RackEfficiency
+	siteEfficiency     []storage.SiteEfficiency
 	listErr            error
 	summaryErr         error
 	seriesErr          error
+	minerEffErr        error
+	rackEffErr         error
+	siteEffErr         error
 	lastReadingsFilter storage.ReadingsFilter
 	lastSummaryFilter  storage.SummaryFilter
 	lastSeriesFilter   storage.MinerSeriesFilter
+	lastEffFilter      storage.EfficiencyFilter
 }
 
 func (r *stubRepository) PersistTelemetry(_ context.Context, _ telemetry.IngestRequest, _ []byte) error {
@@ -90,6 +97,30 @@ func (r *stubRepository) ListMinerSeries(_ context.Context, filter storage.Miner
 		return nil, r.seriesErr
 	}
 	return r.series, nil
+}
+
+func (r *stubRepository) ListMinerEfficiency(_ context.Context, filter storage.EfficiencyFilter) ([]storage.MinerEfficiency, error) {
+	r.lastEffFilter = filter
+	if r.minerEffErr != nil {
+		return nil, r.minerEffErr
+	}
+	return r.minerEfficiency, nil
+}
+
+func (r *stubRepository) ListRackEfficiency(_ context.Context, filter storage.EfficiencyFilter) ([]storage.RackEfficiency, error) {
+	r.lastEffFilter = filter
+	if r.rackEffErr != nil {
+		return nil, r.rackEffErr
+	}
+	return r.rackEfficiency, nil
+}
+
+func (r *stubRepository) ListSiteEfficiency(_ context.Context, filter storage.EfficiencyFilter) ([]storage.SiteEfficiency, error) {
+	r.lastEffFilter = filter
+	if r.siteEffErr != nil {
+		return nil, r.siteEffErr
+	}
+	return r.siteEfficiency, nil
 }
 
 func (r *stubRepository) Close() {}
@@ -711,5 +742,111 @@ func TestMinerTimeseriesRejectsInvalidResolution(t *testing.T) {
 	}
 	if !strings.Contains(resp.Body.String(), "validation_error") {
 		t.Fatalf("expected validation_error response, got %s", resp.Body.String())
+	}
+}
+
+func TestEfficiencyMinerEndpointReturnsItems(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	publisher := &stubPublisher{}
+	repo := &stubRepository{
+		minerEfficiency: []storage.MinerEfficiency{
+			{
+				SiteID:         "site-cl-01",
+				RackID:         "rack-cl-01-01",
+				MinerID:        "asic-000001",
+				MinerModel:     "S21",
+				Samples:        12,
+				RawJTH:         18.1,
+				CompensatedJTH: 17.8,
+				ThermalBand:    "optimal",
+			},
+		},
+	}
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20, APIKeyAuthConfig{})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/efficiency/miners?site_id=site-cl-01&window_minutes=120&limit=50", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, resp.Code, resp.Body.String())
+	}
+	if repo.lastEffFilter.WindowMinutes != 120 {
+		t.Fatalf("expected window_minutes=120, got %d", repo.lastEffFilter.WindowMinutes)
+	}
+	if !strings.Contains(resp.Body.String(), "\"compensated_jth\":17.8") {
+		t.Fatalf("expected efficiency payload, got %s", resp.Body.String())
+	}
+}
+
+func TestEfficiencyRackEndpointReturnsItems(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	publisher := &stubPublisher{}
+	repo := &stubRepository{
+		rackEfficiency: []storage.RackEfficiency{
+			{
+				SiteID:         "site-cl-01",
+				RackID:         "rack-cl-01-01",
+				Miners:         10,
+				Samples:        120,
+				RawJTH:         19.4,
+				CompensatedJTH: 18.9,
+			},
+		},
+	}
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20, APIKeyAuthConfig{})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/efficiency/racks?site_id=site-cl-01&window_minutes=60&limit=20", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, resp.Code, resp.Body.String())
+	}
+	if !strings.Contains(resp.Body.String(), "\"miners\":10") {
+		t.Fatalf("expected rack efficiency payload, got %s", resp.Body.String())
+	}
+}
+
+func TestAnomalyEndpointReturnsReport(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	publisher := &stubPublisher{}
+	repo := &stubRepository{
+		items: []storage.TelemetryReading{
+			{
+				Timestamp:   time.Date(2026, 3, 24, 14, 0, 0, 0, time.UTC),
+				SiteID:      "site-cl-01",
+				RackID:      "rack-cl-01-01",
+				MinerID:     "asic-000042",
+				MinerModel:  "S21",
+				TempCelsius: 95,
+				Tags: map[string]string{
+					"ambient_temp_c": "30",
+				},
+			},
+		},
+		series: []storage.MinerSeriesPoint{
+			{Bucket: time.Date(2026, 3, 24, 12, 0, 0, 0, time.UTC), AvgHashrateTHs: 195, AvgPowerWatts: 3500, AvgTempCelsius: 88, MaxTempCelsius: 93, AvgFanRPM: 6500, AvgEfficiencyJTH: 18.0},
+			{Bucket: time.Date(2026, 3, 24, 13, 0, 0, 0, time.UTC), AvgHashrateTHs: 182, AvgPowerWatts: 3510, AvgTempCelsius: 94, MaxTempCelsius: 98, AvgFanRPM: 7200, AvgEfficiencyJTH: 19.2},
+		},
+	}
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20, APIKeyAuthConfig{})
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/v1/anomalies/miners/ASIC_42/analyze?resolution=hour&from=2026-03-24T12:00:00Z&to=2026-03-24T14:00:00Z&limit=24",
+		nil,
+	)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, resp.Code, resp.Body.String())
+	}
+	if !strings.Contains(resp.Body.String(), "\"summary_line\"") {
+		t.Fatalf("expected anomaly summary_line in response, got %s", resp.Body.String())
+	}
+	if repo.lastSeriesFilter.MinerID != "asic-000042" {
+		t.Fatalf("expected normalized miner_id for anomaly endpoint, got %s", repo.lastSeriesFilter.MinerID)
 	}
 }

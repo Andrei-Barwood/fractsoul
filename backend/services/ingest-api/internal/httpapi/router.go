@@ -33,6 +33,8 @@ func NewRouter(
 
 	telemetryHandler := NewTelemetryHandler(logger, publisher, telemetrySubject, ingestMaxBodyBytes)
 	telemetryReadHandler := NewTelemetryReadHandler(logger, repository)
+	efficiencyHandler := NewEfficiencyHandler(logger, repository)
+	anomalyHandler := NewAnomalyHandler(logger, repository)
 
 	router.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -46,6 +48,10 @@ func NewRouter(
 		v1.GET("/telemetry/summary", telemetryReadHandler.Summary)
 		v1.GET("/telemetry/sites/:site_id/racks/:rack_id/readings", telemetryReadHandler.RackReadings)
 		v1.GET("/telemetry/miners/:miner_id/timeseries", telemetryReadHandler.MinerTimeSeries)
+		v1.GET("/efficiency/miners", efficiencyHandler.MinerEfficiency)
+		v1.GET("/efficiency/racks", efficiencyHandler.RackEfficiency)
+		v1.GET("/efficiency/sites", efficiencyHandler.SiteEfficiency)
+		v1.GET("/anomalies/miners/:miner_id/analyze", anomalyHandler.AnalyzeMiner)
 	}
 
 	return router

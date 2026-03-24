@@ -51,6 +51,10 @@ Variables:
 - `GET /v1/telemetry/summary`
 - `GET /v1/telemetry/sites/:site_id/racks/:rack_id/readings`
 - `GET /v1/telemetry/miners/:miner_id/timeseries`
+- `GET /v1/efficiency/miners`
+- `GET /v1/efficiency/racks`
+- `GET /v1/efficiency/sites`
+- `GET /v1/anomalies/miners/:miner_id/analyze`
 - `GET /dashboard/` (dashboard v0 embebido)
 
 Ejemplos:
@@ -60,6 +64,10 @@ curl "http://localhost:8080/v1/telemetry/readings?site_id=site-cl-01&model=s21&l
 curl "http://localhost:8080/v1/telemetry/summary?window_minutes=60&model=s21"
 curl "http://localhost:8080/v1/telemetry/sites/site-cl-01/racks/rack-cl-01-01/readings?status=warning&model=s21&limit=20"
 curl "http://localhost:8080/v1/telemetry/miners/asic-000001/timeseries?resolution=minute&from=2026-03-24T00:00:00Z&to=2026-03-24T12:00:00Z"
+curl "http://localhost:8080/v1/efficiency/miners?window_minutes=120&limit=20"
+curl "http://localhost:8080/v1/efficiency/racks?site_id=site-cl-01&window_minutes=120"
+curl "http://localhost:8080/v1/efficiency/sites?window_minutes=120"
+curl "http://localhost:8080/v1/anomalies/miners/asic-000001/analyze?resolution=minute&from=2026-03-24T00:00:00Z&to=2026-03-24T12:00:00Z"
 # Si API auth esta habilitada:
 curl -H "X-API-Key: local-dev-key" "http://localhost:8080/v1/telemetry/readings?limit=5"
 ```
@@ -124,6 +132,11 @@ Flags relevantes del simulador:
 - `-schedule` (`burst|staggered`)
 - `-schedule-jitter` (ej. `250ms`)
 - `-api-key` (si auth esta habilitada)
+
+Tags adicionales emitidos por simulador para analitica:
+- `ambient_temp_c`
+- `freq_mhz`
+- `volt_mv`
 
 ## OpenAPI
 
