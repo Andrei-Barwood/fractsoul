@@ -24,6 +24,24 @@ type Config struct {
 	ProcessorMaxDeliver int
 	ProcessorRetryDelay time.Duration
 	IngestMaxBodyBytes  int64
+	AlertsEnabled       bool
+	AlertSuppressWindow time.Duration
+	AlertNotifyTimeout  time.Duration
+	AlertNotifyRetries  int
+	AlertNotifyBackoff  time.Duration
+	AlertQueueSize      int
+	AlertWorkerCount    int
+	AlertWebhookEnabled bool
+	AlertWebhookURL     string
+	AlertWebhookHeader  string
+	AlertWebhookToken   string
+	AlertEmailEnabled   bool
+	AlertSMTPAddr       string
+	AlertSMTPUsername   string
+	AlertSMTPPassword   string
+	AlertEmailFrom      string
+	AlertEmailTo        []string
+	AlertEmailSubject   string
 }
 
 func LoadConfig() Config {
@@ -44,6 +62,24 @@ func LoadConfig() Config {
 		ProcessorMaxDeliver: getEnvAsInt("PROCESSOR_MAX_DELIVER", 5),
 		ProcessorRetryDelay: getEnvAsDuration("PROCESSOR_RETRY_DELAY", 2*time.Second),
 		IngestMaxBodyBytes:  getEnvAsInt64("INGEST_MAX_BODY_BYTES", 1<<20),
+		AlertsEnabled:       getEnvAsBool("ALERTS_ENABLED", true),
+		AlertSuppressWindow: getEnvAsDuration("ALERT_SUPPRESS_WINDOW", 10*time.Minute),
+		AlertNotifyTimeout:  getEnvAsDuration("ALERT_NOTIFY_TIMEOUT", 3*time.Second),
+		AlertNotifyRetries:  getEnvAsInt("ALERT_NOTIFY_RETRIES", 3),
+		AlertNotifyBackoff:  getEnvAsDuration("ALERT_NOTIFY_BACKOFF", 500*time.Millisecond),
+		AlertQueueSize:      getEnvAsInt("ALERT_QUEUE_SIZE", 256),
+		AlertWorkerCount:    getEnvAsInt("ALERT_WORKER_COUNT", 2),
+		AlertWebhookEnabled: getEnvAsBool("ALERT_WEBHOOK_ENABLED", false),
+		AlertWebhookURL:     getEnv("ALERT_WEBHOOK_URL", ""),
+		AlertWebhookHeader:  getEnv("ALERT_WEBHOOK_HEADER", "Authorization"),
+		AlertWebhookToken:   getEnv("ALERT_WEBHOOK_TOKEN", ""),
+		AlertEmailEnabled:   getEnvAsBool("ALERT_EMAIL_ENABLED", false),
+		AlertSMTPAddr:       getEnv("ALERT_SMTP_ADDR", ""),
+		AlertSMTPUsername:   getEnv("ALERT_SMTP_USERNAME", ""),
+		AlertSMTPPassword:   getEnv("ALERT_SMTP_PASSWORD", ""),
+		AlertEmailFrom:      getEnv("ALERT_EMAIL_FROM", "alerts@fractsoul.local"),
+		AlertEmailTo:        getEnvAsList("ALERT_EMAIL_TO"),
+		AlertEmailSubject:   getEnv("ALERT_EMAIL_SUBJECT_PREFIX", "[Fractsoul Alert]"),
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/alerts"
 	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/httpapi"
 	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/observability"
 	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/processor"
@@ -55,6 +56,74 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	if repository != nil && cfg.ProcessorEnabled {
+		var alertHandler processor.AlertHandler
+		if cfg.AlertsEnabled {
+			alertRepo, ok := any(repository).(alerts.Repository)
+			if !ok {
+				return fmt.Errorf("repository does not implement alerts repository interface")
+			}
+
+			notifiers := make([]alerts.Notifier, 0, 2)
+			if cfg.AlertWebhookEnabled {
+				webhookNotifier, err := alerts.NewWebhookNotifier(alerts.WebhookConfig{
+					URL:        cfg.AlertWebhookURL,
+					AuthHeader: cfg.AlertWebhookHeader,
+					AuthToken:  cfg.AlertWebhookToken,
+					Timeout:    cfg.AlertNotifyTimeout,
+				})
+				if err != nil {
+					return fmt.Errorf("init webhook notifier: %w", err)
+				}
+				notifiers = append(notifiers, webhookNotifier)
+			}
+			if cfg.AlertEmailEnabled {
+				emailNotifier, err := alerts.NewSMTPNotifier(alerts.SMTPConfig{
+					Addr:          cfg.AlertSMTPAddr,
+					Username:      cfg.AlertSMTPUsername,
+					Password:      cfg.AlertSMTPPassword,
+					From:          cfg.AlertEmailFrom,
+					To:            cfg.AlertEmailTo,
+					SubjectPrefix: cfg.AlertEmailSubject,
+				})
+				if err != nil {
+					return fmt.Errorf("init smtp notifier: %w", err)
+				}
+				notifiers = append(notifiers, emailNotifier)
+			}
+
+			alertService, err := alerts.NewService(
+				logger,
+				alertRepo,
+				alerts.ServiceConfig{
+					Enabled:           cfg.AlertsEnabled,
+					SuppressionWindow: cfg.AlertSuppressWindow,
+					NotifyTimeout:     cfg.AlertNotifyTimeout,
+					NotifyRetries:     cfg.AlertNotifyRetries,
+					RetryBackoff:      cfg.AlertNotifyBackoff,
+					QueueSize:         cfg.AlertQueueSize,
+					WorkerCount:       cfg.AlertWorkerCount,
+				},
+				alerts.DefaultRules(),
+				notifiers,
+			)
+			if err != nil {
+				return fmt.Errorf("init alerts service: %w", err)
+			}
+			defer alertService.Close()
+			alertHandler = alertService
+
+			logger.Info(
+				"alerts service ready",
+				"enabled", cfg.AlertsEnabled,
+				"suppress_window", cfg.AlertSuppressWindow.String(),
+				"webhook_enabled", cfg.AlertWebhookEnabled,
+				"email_enabled", cfg.AlertEmailEnabled,
+				"notify_retries", cfg.AlertNotifyRetries,
+				"queue_size", cfg.AlertQueueSize,
+				"workers", cfg.AlertWorkerCount,
+			)
+		}
+
 		consumerCfg := processor.Config{
 			Subject:    cfg.TelemetrySubject,
 			StreamName: cfg.TelemetryStream,
@@ -64,7 +133,7 @@ func Run(ctx context.Context, cfg Config) error {
 			RetryDelay: cfg.ProcessorRetryDelay,
 		}
 
-		consumer, err := processor.NewConsumer(logger, repository, cfg.NATSURL, consumerCfg)
+		consumer, err := processor.NewConsumer(logger, repository, alertHandler, cfg.NATSURL, consumerCfg)
 		if err != nil {
 			return fmt.Errorf("start telemetry processor: %w", err)
 		}

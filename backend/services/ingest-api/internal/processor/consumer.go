@@ -24,6 +24,7 @@ type Config struct {
 type Consumer struct {
 	logger *slog.Logger
 	repo   storage.Repository
+	alerts AlertHandler
 	conn   *nats.Conn
 	js     nats.JetStreamContext
 	cfg    Config
@@ -43,7 +44,17 @@ type DLQMessage struct {
 	Payload       json.RawMessage   `json:"payload"`
 }
 
-func NewConsumer(logger *slog.Logger, repo storage.Repository, natsURL string, cfg Config) (*Consumer, error) {
+type AlertHandler interface {
+	ProcessEvent(ctx context.Context, event telemetry.IngestRequest) error
+}
+
+func NewConsumer(
+	logger *slog.Logger,
+	repo storage.Repository,
+	alerts AlertHandler,
+	natsURL string,
+	cfg Config,
+) (*Consumer, error) {
 	if cfg.Subject == "" {
 		return nil, fmt.Errorf("consumer subject is required")
 	}
@@ -82,6 +93,7 @@ func NewConsumer(logger *slog.Logger, repo storage.Repository, natsURL string, c
 	return &Consumer{
 		logger: logger,
 		repo:   repo,
+		alerts: alerts,
 		conn:   conn,
 		js:     js,
 		cfg:    cfg,
@@ -171,6 +183,21 @@ func (c *Consumer) handleMessage(msg *nats.Msg) {
 			c.logger.Error("failed to nak message for retry", "error", nakErr)
 		}
 		return
+	}
+
+	if c.alerts != nil {
+		alertCtx, cancelAlert := context.WithTimeout(context.Background(), 3*time.Second)
+		if err := c.alerts.ProcessEvent(alertCtx, event); err != nil {
+			c.logger.Error(
+				"alerts pipeline failed for event",
+				"event_id", event.EventID,
+				"site_id", event.SiteID,
+				"rack_id", event.RackID,
+				"miner_id", event.MinerID,
+				"error", err,
+			)
+		}
+		cancelAlert()
 	}
 
 	if err := msg.Ack(); err != nil {

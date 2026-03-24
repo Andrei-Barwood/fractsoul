@@ -1,4 +1,4 @@
-# MVP Bitcoin Mining - Kickoff D1-D51
+# MVP Bitcoin Mining - Kickoff D1-D58
 
 ## Estado
 - [x] D1: Objetivo del MVP, alcance y no-objetivos
@@ -52,6 +52,13 @@
 - [x] D49: Añadir filtros por sitio/rack/modelo
 - [x] D50: Añadir vista detalle por maquina
 - [x] D51: Revision semanal + priorizacion alertas
+- [x] D52: Crear motor de reglas de alertas (esqueleto)
+- [x] D53: Regla de sobretemperatura
+- [x] D54: Regla de pico de consumo
+- [x] D55: Regla de caida de hashrate
+- [x] D56: Deduplicacion y ventana de supresion
+- [x] D57: Notificaciones via webhook/email
+- [x] D58: Validar flujo completo de alertas
 
 ## Navegacion
 - [D1 Objetivo y Alcance](./D1_objetivo_alcance.md)
@@ -105,8 +112,14 @@
 - [D49 Filtros por sitio/rack/modelo](./D49_filtros_sitio_rack_modelo.md)
 - [D50 Vista detalle por maquina](./D50_vista_detalle_por_maquina.md)
 - [D51 Revision semanal y priorizacion alertas](./D51_revision_semanal_priorizacion_alertas.md)
+- [D52 Motor de reglas de alertas (esqueleto)](./D52_motor_reglas_alertas_esqueleto.md)
+- [D53 Regla de sobretemperatura](./D53_regla_sobretemperatura.md)
+- [D54 Regla de pico de consumo](./D54_regla_pico_consumo.md)
+- [D55 Regla de caida de hashrate](./D55_regla_caida_hashrate.md)
+- [D56 Deduplicacion y ventana de supresion](./D56_deduplicacion_ventana_supresion.md)
+- [D57 Notificaciones webhook/email](./D57_notificaciones_webhook_email.md)
+- [D58 Validacion E2E flujo alertas](./D58_validacion_flujo_alertas_e2e.md)
 
 ## Siguiente ejecucion sugerida (S2)
-- D52-D55: Motor de reglas y 3 reglas base (temperatura, consumo, hashrate).
-- D56: Deduplicacion y ventana de supresion.
-- D57-D58: Notificaciones y validacion E2E de alertas.
+- D59: Demo S2 con casos de fallo simulado.
+- D60: Retro S2 + plan detallado S3.

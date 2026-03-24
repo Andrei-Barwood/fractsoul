@@ -25,6 +25,24 @@ Variables:
 - `INGEST_MAX_BODY_BYTES` (default `1048576`)
 - `DATABASE_URL` (ej: `postgres://postgres:postgres@localhost:5432/mining?sslmode=disable`)
 - `TELEMETRY_PROCESSOR_ENABLED` (default `true`)
+- `ALERTS_ENABLED` (default `true`)
+- `ALERT_SUPPRESS_WINDOW` (default `10m`)
+- `ALERT_NOTIFY_TIMEOUT` (default `3s`)
+- `ALERT_NOTIFY_RETRIES` (default `3`)
+- `ALERT_NOTIFY_BACKOFF` (default `500ms`)
+- `ALERT_QUEUE_SIZE` (default `256`)
+- `ALERT_WORKER_COUNT` (default `2`)
+- `ALERT_WEBHOOK_ENABLED` (default `false`)
+- `ALERT_WEBHOOK_URL`
+- `ALERT_WEBHOOK_HEADER` (default `Authorization`)
+- `ALERT_WEBHOOK_TOKEN`
+- `ALERT_EMAIL_ENABLED` (default `false`)
+- `ALERT_SMTP_ADDR` (ej: `localhost:1025`)
+- `ALERT_SMTP_USERNAME`
+- `ALERT_SMTP_PASSWORD`
+- `ALERT_EMAIL_FROM` (default `alerts@fractsoul.local`)
+- `ALERT_EMAIL_TO` (lista separada por comas)
+- `ALERT_EMAIL_SUBJECT_PREFIX` (default `[Fractsoul Alert]`)
 
 ## Endpoints
 - `GET /healthz`
@@ -79,10 +97,17 @@ Prueba de performance con 100 ASICs:
 make perf
 ```
 
+Prueba E2E de alertas (dedupe/supresion):
+
+```bash
+make alerts-e2e
+```
+
 E2E full stack desde raiz del repo:
 
 ```bash
 ./scripts/e2e_simulator_db_api.sh
+./scripts/e2e_alerts_flow.sh
 ```
 
 ## Simulador ASIC

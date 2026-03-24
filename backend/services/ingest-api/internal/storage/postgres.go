@@ -9,7 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/alerts"
 	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/telemetry"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -175,6 +177,471 @@ ON CONFLICT (event_id, ts) DO NOTHING
 	}
 
 	return nil
+}
+
+func (r *PostgresRepository) UpsertAlert(ctx context.Context, input alerts.PersistInput) (alerts.UpsertResult, error) {
+	if strings.TrimSpace(input.RuleID) == "" {
+		return alerts.UpsertResult{}, fmt.Errorf("rule_id is required")
+	}
+	if strings.TrimSpace(input.MinerID) == "" {
+		return alerts.UpsertResult{}, fmt.Errorf("miner_id is required")
+	}
+	if strings.TrimSpace(input.EventID) == "" {
+		return alerts.UpsertResult{}, fmt.Errorf("event_id is required")
+	}
+	if input.SuppressionWindow <= 0 {
+		input.SuppressionWindow = 10 * time.Minute
+	}
+	if input.ObservedAt.IsZero() {
+		input.ObservedAt = time.Now().UTC()
+	} else {
+		input.ObservedAt = input.ObservedAt.UTC()
+	}
+
+	details := input.Details
+	if details == nil {
+		details = map[string]any{}
+	}
+	detailsJSON, err := json.Marshal(details)
+	if err != nil {
+		return alerts.UpsertResult{}, fmt.Errorf("marshal alert details: %w", err)
+	}
+
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return alerts.UpsertResult{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	var existing persistedAlertRow
+	err = tx.QueryRow(ctx, `
+SELECT
+  alert_id,
+  rule_id,
+  rule_name,
+  severity,
+  status,
+  message,
+  fingerprint,
+  dedupe_key,
+  site_id,
+  rack_id,
+  miner_id,
+  event_id::text,
+  miner_model,
+  firmware_version,
+  metric_name,
+  metric_value,
+  threshold_value,
+  first_seen_at,
+  last_seen_at,
+  suppression_until,
+  occurrences,
+  notify_count,
+  last_notified_at,
+  created_at,
+  updated_at,
+  details
+FROM alerts
+WHERE fingerprint = $1
+  AND status IN ('open', 'suppressed')
+ORDER BY last_seen_at DESC
+LIMIT 1
+FOR UPDATE
+`, input.Fingerprint).Scan(
+		&existing.AlertID,
+		&existing.RuleID,
+		&existing.RuleName,
+		&existing.Severity,
+		&existing.Status,
+		&existing.Message,
+		&existing.Fingerprint,
+		&existing.DedupeKey,
+		&existing.SiteID,
+		&existing.RackID,
+		&existing.MinerID,
+		&existing.EventID,
+		&existing.MinerModel,
+		&existing.Firmware,
+		&existing.MetricName,
+		&existing.MetricValue,
+		&existing.Threshold,
+		&existing.FirstSeenAt,
+		&existing.LastSeenAt,
+		&existing.SuppressionUntil,
+		&existing.Occurrences,
+		&existing.NotifyCount,
+		&existing.LastNotifiedAt,
+		&existing.CreatedAt,
+		&existing.UpdatedAt,
+		&existing.DetailsRaw,
+	)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return alerts.UpsertResult{}, fmt.Errorf("query active alert by fingerprint: %w", err)
+	}
+
+	suppressionUntil := input.ObservedAt.Add(input.SuppressionWindow)
+	now := time.Now().UTC()
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		row := persistedAlertRow{
+			AlertID:          uuid.NewString(),
+			RuleID:           input.RuleID,
+			RuleName:         input.RuleName,
+			Severity:         string(input.Severity),
+			Status:           string(alerts.StatusOpen),
+			Message:          input.Message,
+			Fingerprint:      input.Fingerprint,
+			DedupeKey:        input.DedupeKey,
+			SiteID:           input.SiteID,
+			RackID:           input.RackID,
+			MinerID:          input.MinerID,
+			EventID:          input.EventID,
+			MinerModel:       input.MinerModel,
+			Firmware:         input.Firmware,
+			MetricName:       input.MetricName,
+			MetricValue:      input.MetricValue,
+			Threshold:        input.Threshold,
+			FirstSeenAt:      input.ObservedAt,
+			LastSeenAt:       input.ObservedAt,
+			SuppressionUntil: suppressionUntil,
+			Occurrences:      1,
+			NotifyCount:      0,
+			CreatedAt:        now,
+			UpdatedAt:        now,
+			DetailsRaw:       detailsJSON,
+		}
+
+		_, err := tx.Exec(ctx, `
+INSERT INTO alerts (
+  alert_id,
+  rule_id,
+  rule_name,
+  severity,
+  status,
+  message,
+  fingerprint,
+  dedupe_key,
+  site_id,
+  rack_id,
+  miner_id,
+  event_id,
+  miner_model,
+  firmware_version,
+  metric_name,
+  metric_value,
+  threshold_value,
+  first_seen_at,
+  last_seen_at,
+  suppression_until,
+  occurrences,
+  notify_count,
+  details
+)
+VALUES (
+  $1, $2, $3, $4, $5, $6, $7, $8,
+  $9, $10, $11, $12::uuid, $13, $14, $15, $16, $17,
+  $18, $19, $20, $21, $22, $23
+)
+`, row.AlertID, row.RuleID, row.RuleName, row.Severity, row.Status, row.Message, row.Fingerprint,
+			row.DedupeKey, row.SiteID, row.RackID, row.MinerID, row.EventID, row.MinerModel, row.Firmware,
+			row.MetricName, row.MetricValue, row.Threshold, row.FirstSeenAt, row.LastSeenAt, row.SuppressionUntil,
+			row.Occurrences, row.NotifyCount, row.DetailsRaw)
+		if err != nil {
+			return alerts.UpsertResult{}, fmt.Errorf("insert alert: %w", err)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return alerts.UpsertResult{}, fmt.Errorf("commit alert insert tx: %w", err)
+		}
+
+		alert, err := row.toAlert()
+		if err != nil {
+			return alerts.UpsertResult{}, err
+		}
+		return alerts.UpsertResult{
+			Alert:        alert,
+			ShouldNotify: true,
+			Suppressed:   false,
+			IsNew:        true,
+		}, nil
+	}
+
+	suppressed := input.ObservedAt.Before(existing.SuppressionUntil)
+	status := alerts.StatusOpen
+	if suppressed {
+		status = alerts.StatusSuppressed
+	}
+
+	err = tx.QueryRow(ctx, `
+UPDATE alerts
+SET
+  severity = $2,
+  status = $3,
+  message = $4,
+  site_id = $5,
+  rack_id = $6,
+  miner_id = $7,
+  event_id = $8::uuid,
+  miner_model = $9,
+  firmware_version = $10,
+  metric_name = $11,
+  metric_value = $12,
+  threshold_value = $13,
+  last_seen_at = $14,
+  suppression_until = $15,
+  occurrences = occurrences + 1,
+  details = $16,
+  updated_at = NOW()
+WHERE alert_id = $1
+RETURNING
+  alert_id,
+  rule_id,
+  rule_name,
+  severity,
+  status,
+  message,
+  fingerprint,
+  dedupe_key,
+  site_id,
+  rack_id,
+  miner_id,
+  event_id::text,
+  miner_model,
+  firmware_version,
+  metric_name,
+  metric_value,
+  threshold_value,
+  first_seen_at,
+  last_seen_at,
+  suppression_until,
+  occurrences,
+  notify_count,
+  last_notified_at,
+  created_at,
+  updated_at,
+  details
+`,
+		existing.AlertID,
+		string(input.Severity),
+		string(status),
+		input.Message,
+		input.SiteID,
+		input.RackID,
+		input.MinerID,
+		input.EventID,
+		input.MinerModel,
+		input.Firmware,
+		input.MetricName,
+		input.MetricValue,
+		input.Threshold,
+		input.ObservedAt,
+		suppressionUntil,
+		detailsJSON,
+	).Scan(
+		&existing.AlertID,
+		&existing.RuleID,
+		&existing.RuleName,
+		&existing.Severity,
+		&existing.Status,
+		&existing.Message,
+		&existing.Fingerprint,
+		&existing.DedupeKey,
+		&existing.SiteID,
+		&existing.RackID,
+		&existing.MinerID,
+		&existing.EventID,
+		&existing.MinerModel,
+		&existing.Firmware,
+		&existing.MetricName,
+		&existing.MetricValue,
+		&existing.Threshold,
+		&existing.FirstSeenAt,
+		&existing.LastSeenAt,
+		&existing.SuppressionUntil,
+		&existing.Occurrences,
+		&existing.NotifyCount,
+		&existing.LastNotifiedAt,
+		&existing.CreatedAt,
+		&existing.UpdatedAt,
+		&existing.DetailsRaw,
+	)
+	if err != nil {
+		return alerts.UpsertResult{}, fmt.Errorf("update alert: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return alerts.UpsertResult{}, fmt.Errorf("commit alert update tx: %w", err)
+	}
+
+	persisted, err := existing.toAlert()
+	if err != nil {
+		return alerts.UpsertResult{}, err
+	}
+
+	return alerts.UpsertResult{
+		Alert:        persisted,
+		ShouldNotify: !suppressed,
+		Suppressed:   suppressed,
+		IsNew:        false,
+	}, nil
+}
+
+func (r *PostgresRepository) RecordAlertNotification(ctx context.Context, record alerts.NotificationRecord) error {
+	if strings.TrimSpace(record.AlertID) == "" {
+		return fmt.Errorf("alert_id is required")
+	}
+	if strings.TrimSpace(string(record.Channel)) == "" {
+		return fmt.Errorf("channel is required")
+	}
+	if strings.TrimSpace(record.Destination) == "" {
+		return fmt.Errorf("destination is required")
+	}
+	if strings.TrimSpace(string(record.Status)) == "" {
+		return fmt.Errorf("status is required")
+	}
+	if record.Attempt <= 0 {
+		record.Attempt = 1
+	}
+	if record.NotifiedAt.IsZero() {
+		record.NotifiedAt = time.Now().UTC()
+	}
+
+	payload := record.Payload
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal notification payload: %w", err)
+	}
+
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	_, err = tx.Exec(ctx, `
+INSERT INTO alert_notifications (
+  notification_id,
+  alert_id,
+  channel,
+  destination,
+  status,
+  attempt,
+  error_message,
+  response_code,
+  payload,
+  sent_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, 0), $9, $10)
+`,
+		uuid.NewString(),
+		record.AlertID,
+		string(record.Channel),
+		record.Destination,
+		string(record.Status),
+		record.Attempt,
+		strings.TrimSpace(record.ErrorMessage),
+		record.ResponseCode,
+		payloadJSON,
+		record.NotifiedAt.UTC(),
+	)
+	if err != nil {
+		return fmt.Errorf("insert alert notification: %w", err)
+	}
+
+	if record.Status == alerts.NotificationSent {
+		_, err = tx.Exec(ctx, `
+UPDATE alerts
+SET
+  notify_count = notify_count + 1,
+  last_notified_at = $2,
+  updated_at = NOW()
+WHERE alert_id = $1
+`, record.AlertID, record.NotifiedAt.UTC())
+		if err != nil {
+			return fmt.Errorf("update alert notify metadata: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit alert notification tx: %w", err)
+	}
+
+	return nil
+}
+
+type persistedAlertRow struct {
+	AlertID          string
+	RuleID           string
+	RuleName         string
+	Severity         string
+	Status           string
+	Message          string
+	Fingerprint      string
+	DedupeKey        string
+	SiteID           string
+	RackID           string
+	MinerID          string
+	EventID          string
+	MinerModel       string
+	Firmware         string
+	MetricName       string
+	MetricValue      float64
+	Threshold        float64
+	FirstSeenAt      time.Time
+	LastSeenAt       time.Time
+	SuppressionUntil time.Time
+	Occurrences      int
+	NotifyCount      int
+	LastNotifiedAt   *time.Time
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	DetailsRaw       []byte
+}
+
+func (row persistedAlertRow) toAlert() (alerts.PersistedAlert, error) {
+	details := map[string]any{}
+	if len(row.DetailsRaw) > 0 {
+		if err := json.Unmarshal(row.DetailsRaw, &details); err != nil {
+			return alerts.PersistedAlert{}, fmt.Errorf("decode alert details: %w", err)
+		}
+	}
+
+	return alerts.PersistedAlert{
+		AlertID:          row.AlertID,
+		RuleID:           row.RuleID,
+		RuleName:         row.RuleName,
+		Severity:         alerts.Severity(row.Severity),
+		Status:           alerts.Status(row.Status),
+		Message:          row.Message,
+		Fingerprint:      row.Fingerprint,
+		DedupeKey:        row.DedupeKey,
+		SiteID:           row.SiteID,
+		RackID:           row.RackID,
+		MinerID:          row.MinerID,
+		EventID:          row.EventID,
+		MinerModel:       row.MinerModel,
+		Firmware:         row.Firmware,
+		MetricName:       row.MetricName,
+		MetricValue:      row.MetricValue,
+		Threshold:        row.Threshold,
+		FirstSeenAt:      row.FirstSeenAt,
+		LastSeenAt:       row.LastSeenAt,
+		SuppressionUntil: row.SuppressionUntil,
+		Occurrences:      row.Occurrences,
+		NotifyCount:      row.NotifyCount,
+		LastNotifiedAt:   row.LastNotifiedAt,
+		CreatedAt:        row.CreatedAt,
+		UpdatedAt:        row.UpdatedAt,
+		Details:          details,
+	}, nil
 }
 
 func (r *PostgresRepository) ListReadings(ctx context.Context, filter ReadingsFilter) ([]TelemetryReading, error) {

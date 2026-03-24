@@ -1,4 +1,4 @@
-.PHONY: run lint test integration e2e perf simulate
+.PHONY: run lint test integration e2e alerts-e2e perf simulate
 
 run:
 	go run ./cmd/api
@@ -15,6 +15,9 @@ integration:
 
 e2e:
 	go test -count=1 -tags=e2e ./tests/e2e -v
+
+alerts-e2e:
+	go test -count=1 -tags=e2e ./tests/e2e -run TestIngestPipelinePersistsAlerts -v
 
 perf:
 	go test -count=1 -tags=perf ./tests/perf -v
