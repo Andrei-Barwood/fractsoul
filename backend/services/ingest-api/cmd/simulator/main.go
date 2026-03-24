@@ -10,6 +10,7 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -28,6 +29,7 @@ const (
 
 type config struct {
 	APIURL         string
+	APIKey         string
 	Duration       time.Duration
 	Tick           time.Duration
 	Miners         int
@@ -120,6 +122,7 @@ func main() {
 func loadConfig() config {
 	cfg := config{}
 	flag.StringVar(&cfg.APIURL, "api-url", defaultAPIURL, "Base URL of ingest API")
+	flag.StringVar(&cfg.APIKey, "api-key", "", "API key for ingest authentication (optional)")
 	flag.DurationVar(&cfg.Duration, "duration", defaultDuration, "Simulation total duration")
 	flag.DurationVar(&cfg.Tick, "tick", defaultTickInterval, "Interval between telemetry batches")
 	flag.IntVar(&cfg.Miners, "miners", defaultMiners, "Fleet size")
@@ -183,7 +186,7 @@ func runTick(client *http.Client, cfg config, fleet []*minerState, tick int, tim
 
 			payload := miner.buildPayload(tick, timestamp)
 			atomic.AddInt64(&stats.total, 1)
-			if err := postTelemetry(client, cfg.APIURL, payload); err != nil {
+			if err := postTelemetry(client, cfg.APIURL, cfg.APIKey, payload); err != nil {
 				atomic.AddInt64(&stats.failed, 1)
 				log.Printf("send failed miner=%s err=%v", miner.MinerID, err)
 				return
@@ -383,7 +386,7 @@ func randomJitter(miner *minerState, maxJitter time.Duration) time.Duration {
 	return time.Duration(miner.rng.Int63n(maxJitter.Nanoseconds() + 1))
 }
 
-func postTelemetry(client *http.Client, apiURL string, payload map[string]any) error {
+func postTelemetry(client *http.Client, apiURL, apiKey string, payload map[string]any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
@@ -394,6 +397,9 @@ func postTelemetry(client *http.Client, apiURL string, payload map[string]any) e
 		return fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if strings.TrimSpace(apiKey) != "" {
+		req.Header.Set("X-API-Key", apiKey)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {

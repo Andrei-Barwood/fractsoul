@@ -8,6 +8,9 @@ services:
       APP_PORT: "8080"
       GIN_MODE: release
       LOG_LEVEL: info
+      API_AUTH_ENABLED: "false"
+      API_KEY_HEADER: X-API-Key
+      API_KEYS: local-dev-key
       NATS_URL: nats://nats:4222
       TELEMETRY_SUBJECT: telemetry.raw.v1
       TELEMETRY_STREAM: TELEMETRY

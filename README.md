@@ -71,6 +71,12 @@ make simulate
 ./scripts/perf_100_asic.sh
 ```
 
+10. Prueba de integracion API/DB:
+
+```bash
+./scripts/integration_api_db.sh
+```
+
 ## CI
 
 La pipeline minima corre en `.github/workflows/ci.yml` e incluye:
@@ -81,3 +87,8 @@ La pipeline minima corre en `.github/workflows/ci.yml` e incluye:
 ## Documentacion de planning
 
 Ver [docs/planning/README.md](docs/planning/README.md).
+
+## OpenAPI
+
+Especificacion minima disponible en:
+- [docs/openapi/ingest_api_v1.yaml](docs/openapi/ingest_api_v1.yaml)

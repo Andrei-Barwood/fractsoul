@@ -95,7 +95,89 @@ func (r *stubRepository) Close() {}
 func buildTestRouter() (http.Handler, *stubPublisher) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	publisher := &stubPublisher{}
-	return NewRouter(logger, publisher, "telemetry.raw.v1", nil, 1<<20), publisher
+	return NewRouter(logger, publisher, "telemetry.raw.v1", nil, 1<<20, APIKeyAuthConfig{}), publisher
+}
+
+func TestAuthAllowsHealthzWithoutAPIKey(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	publisher := &stubPublisher{}
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", nil, 1<<20, APIKeyAuthConfig{
+		Enabled: true,
+		Header:  "X-API-Key",
+		Keys:    []string{"test-key"},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, resp.Code)
+	}
+}
+
+func TestAuthRejectsMissingAPIKey(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	publisher := &stubPublisher{}
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", nil, 1<<20, APIKeyAuthConfig{
+		Enabled: true,
+		Header:  "X-API-Key",
+		Keys:    []string{"test-key"},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/telemetry/readings", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusUnauthorized, resp.Code, resp.Body.String())
+	}
+	if !strings.Contains(resp.Body.String(), "unauthorized") {
+		t.Fatalf("expected unauthorized response, got %s", resp.Body.String())
+	}
+}
+
+func TestAuthRejectsInvalidAPIKey(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	publisher := &stubPublisher{}
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", nil, 1<<20, APIKeyAuthConfig{
+		Enabled: true,
+		Header:  "X-API-Key",
+		Keys:    []string{"test-key"},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/telemetry/readings", nil)
+	req.Header.Set("X-API-Key", "wrong-key")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusUnauthorized, resp.Code, resp.Body.String())
+	}
+}
+
+func TestAuthAcceptsValidAPIKey(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	publisher := &stubPublisher{}
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", nil, 1<<20, APIKeyAuthConfig{
+		Enabled: true,
+		Header:  "X-API-Key",
+		Keys:    []string{"test-key"},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/telemetry/readings", nil)
+	req.Header.Set("X-API-Key", "test-key")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	// Repository is nil by design, so a valid key should reach the handler and return dependency_unavailable.
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusServiceUnavailable, resp.Code, resp.Body.String())
+	}
 }
 
 func TestIngestAcceptsValidPayload(t *testing.T) {
@@ -249,7 +331,7 @@ func TestIngestRejectsUnknownField(t *testing.T) {
 func TestIngestRejectsPayloadTooLarge(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	publisher := &stubPublisher{}
-	router := NewRouter(logger, publisher, "telemetry.raw.v1", nil, 256)
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", nil, 256, APIKeyAuthConfig{})
 
 	largeTag := strings.Repeat("a", 1024)
 	payload := `{
@@ -372,7 +454,7 @@ func TestIngestRejectsFutureTimestamp(t *testing.T) {
 func TestIngestReturnsDependencyErrorWhenPublishFails(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	publisher := &stubPublisher{publishErr: errors.New("nats unavailable")}
-	router := NewRouter(logger, publisher, "telemetry.raw.v1", nil, 1<<20)
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", nil, 1<<20, APIKeyAuthConfig{})
 
 	payload := `{
 		"event_id":"550e8400-e29b-41d4-a716-446655440000",
@@ -444,7 +526,7 @@ func TestReadingsReturnsItems(t *testing.T) {
 			},
 		},
 	}
-	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20)
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20, APIKeyAuthConfig{})
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/telemetry/readings?site_id=SITE-CL-1&limit=10", nil)
 	resp := httptest.NewRecorder()
@@ -482,7 +564,7 @@ func TestSummaryReturnsOK(t *testing.T) {
 			AvgEfficiencyJTH: 26.1,
 		},
 	}
-	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20)
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20, APIKeyAuthConfig{})
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/telemetry/summary?window_minutes=120", nil)
 	resp := httptest.NewRecorder()
@@ -513,7 +595,7 @@ func TestRackReadingsEndpointAppliesPathAndStatusFilters(t *testing.T) {
 			},
 		},
 	}
-	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20)
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20, APIKeyAuthConfig{})
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -551,7 +633,7 @@ func TestMinerTimeseriesEndpointReturnsSeries(t *testing.T) {
 			},
 		},
 	}
-	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20)
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20, APIKeyAuthConfig{})
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -586,7 +668,7 @@ func TestMinerTimeseriesRejectsInvalidResolution(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	publisher := &stubPublisher{}
 	repo := &stubRepository{}
-	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20)
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20, APIKeyAuthConfig{})
 
 	req := httptest.NewRequest(
 		http.MethodGet,

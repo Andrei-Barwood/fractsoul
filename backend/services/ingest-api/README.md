@@ -12,6 +12,9 @@ Variables:
 - `APP_PORT` (default `8080`)
 - `GIN_MODE` (default `release`)
 - `LOG_LEVEL` (default `info`)
+- `API_AUTH_ENABLED` (default `false`)
+- `API_KEY_HEADER` (default `X-API-Key`)
+- `API_KEYS` (lista separada por comas)
 - `NATS_URL` (default `nats://localhost:4222`)
 - `TELEMETRY_SUBJECT` (default `telemetry.raw.v1`)
 - `TELEMETRY_STREAM` (default `TELEMETRY`)
@@ -38,6 +41,8 @@ curl "http://localhost:8080/v1/telemetry/readings?site_id=site-cl-01&limit=5"
 curl "http://localhost:8080/v1/telemetry/summary?window_minutes=60"
 curl "http://localhost:8080/v1/telemetry/sites/site-cl-01/racks/rack-cl-01-01/readings?status=warning&limit=20"
 curl "http://localhost:8080/v1/telemetry/miners/asic-000001/timeseries?resolution=minute&from=2026-03-24T00:00:00Z&to=2026-03-24T12:00:00Z"
+# Si API auth esta habilitada:
+curl -H "X-API-Key: local-dev-key" "http://localhost:8080/v1/telemetry/readings?limit=5"
 ```
 
 ## Validacion y errores
@@ -53,6 +58,12 @@ Con compose levantado:
 
 ```bash
 make e2e
+```
+
+Prueba de integracion API/DB:
+
+```bash
+make integration
 ```
 
 Prueba de performance con 100 ASICs:
@@ -79,3 +90,9 @@ Flags relevantes del simulador:
 - `-profile-mode` (`mixed|s19xp|s21|m50`)
 - `-schedule` (`burst|staggered`)
 - `-schedule-jitter` (ej. `250ms`)
+- `-api-key` (si auth esta habilitada)
+
+## OpenAPI
+
+Especificacion minima publicada en:
+- `docs/openapi/ingest_api_v1.yaml`

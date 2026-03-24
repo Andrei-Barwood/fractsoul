@@ -22,6 +22,8 @@ import (
 func TestPerformanceWith100ASICs(t *testing.T) {
 	apiURL := getEnv("PERF_API_URL", "http://localhost:8080")
 	databaseURL := getEnv("PERF_DATABASE_URL", "postgres://postgres:postgres@localhost:5432/mining?sslmode=disable")
+	apiKey := getEnv("PERF_API_KEY", "")
+	apiKeyHeader := getEnv("PERF_API_KEY_HEADER", "X-API-Key")
 	simDuration := 20 * time.Second
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -38,7 +40,7 @@ func TestPerformanceWith100ASICs(t *testing.T) {
 	}
 
 	beforeCount := readingsCount(t, ctx, pool)
-	runSimulator100(t, apiURL, simDuration)
+	runSimulator100(t, apiURL, apiKey, simDuration)
 	afterCount := readingsCount(t, ctx, pool)
 
 	inserted := afterCount - beforeCount
@@ -60,8 +62,13 @@ func TestPerformanceWith100ASICs(t *testing.T) {
 	rackURL := apiURL + "/v1/telemetry/sites/site-cl-01/racks/rack-cl-01-01/readings?limit=50"
 	minerURL := apiURL + "/v1/telemetry/miners/asic-000001/timeseries?resolution=minute&from=" + from + "&to=" + to + "&limit=120"
 
-	rackStats := runEndpointLoad(t, client, rackURL, 40, 8)
-	minerStats := runEndpointLoad(t, client, minerURL, 40, 8)
+	headers := map[string]string{}
+	if apiKey != "" {
+		headers[apiKeyHeader] = apiKey
+	}
+
+	rackStats := runEndpointLoad(t, client, rackURL, headers, 40, 8)
+	minerStats := runEndpointLoad(t, client, minerURL, headers, 40, 8)
 
 	t.Logf("rack endpoint p95=%s avg=%s", rackStats.P95, rackStats.Avg)
 	t.Logf("miner endpoint p95=%s avg=%s", minerStats.P95, minerStats.Avg)
@@ -81,7 +88,13 @@ type latencyStats struct {
 	P95   time.Duration
 }
 
-func runEndpointLoad(t *testing.T, client *http.Client, endpoint string, requests, workers int) latencyStats {
+func runEndpointLoad(
+	t *testing.T,
+	client *http.Client,
+	endpoint string,
+	headers map[string]string,
+	requests, workers int,
+) latencyStats {
 	t.Helper()
 
 	var (
@@ -98,7 +111,20 @@ func runEndpointLoad(t *testing.T, client *http.Client, endpoint string, request
 			defer wg.Done()
 			for range jobs {
 				start := time.Now()
-				resp, err := client.Get(endpoint) //nolint:noctx // short-lived perf probe
+				req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+				if err != nil {
+					mu.Lock()
+					if firstErr == nil {
+						firstErr = fmt.Errorf("build request failed: %w", err)
+					}
+					mu.Unlock()
+					continue
+				}
+				for key, value := range headers {
+					req.Header.Set(key, value)
+				}
+
+				resp, err := client.Do(req) //nolint:noctx // short-lived perf probe
 				elapsed := time.Since(start)
 				if err != nil {
 					mu.Lock()
@@ -157,12 +183,11 @@ func runEndpointLoad(t *testing.T, client *http.Client, endpoint string, request
 	}
 }
 
-func runSimulator100(t *testing.T, apiURL string, duration time.Duration) {
+func runSimulator100(t *testing.T, apiURL, apiKey string, duration time.Duration) {
 	t.Helper()
 
 	moduleRoot := filepath.Clean(filepath.Join("..", ".."))
-	cmd := exec.Command(
-		"go",
+	args := []string{
 		"run",
 		"./cmd/simulator",
 		"-api-url", apiURL,
@@ -173,7 +198,11 @@ func runSimulator100(t *testing.T, apiURL string, duration time.Duration) {
 		"-profile-mode", "mixed",
 		"-schedule", "staggered",
 		"-schedule-jitter", "200ms",
-	)
+	}
+	if apiKey != "" {
+		args = append(args, "-api-key", apiKey)
+	}
+	cmd := exec.Command("go", args...)
 	cmd.Dir = moduleRoot
 	output, err := cmd.CombinedOutput()
 	if err != nil {

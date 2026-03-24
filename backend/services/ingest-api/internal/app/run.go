@@ -19,6 +19,10 @@ func Run(ctx context.Context, cfg Config) error {
 	logger := observability.NewLogger(cfg.LogLevel)
 	gin.SetMode(cfg.GinMode)
 
+	if cfg.APIAuthEnabled && len(cfg.APIKeys) == 0 {
+		return fmt.Errorf("api auth is enabled but API_KEYS is empty")
+	}
+
 	streamSubjects := []string{cfg.TelemetrySubject, cfg.TelemetryDLQSubject}
 	publisher, err := telemetry.NewNATSPublisher(cfg.NATSURL, cfg.TelemetryStream, streamSubjects)
 	if err != nil {
@@ -85,7 +89,27 @@ func Run(ctx context.Context, cfg Config) error {
 		)
 	}
 
-	router := httpapi.NewRouter(logger, publisher, cfg.TelemetrySubject, repository, cfg.IngestMaxBodyBytes)
+	authConfig := httpapi.APIKeyAuthConfig{
+		Enabled: cfg.APIAuthEnabled,
+		Header:  cfg.APIKeyHeader,
+		Keys:    cfg.APIKeys,
+	}
+
+	logger.Info(
+		"http auth configuration",
+		"enabled", cfg.APIAuthEnabled,
+		"header", cfg.APIKeyHeader,
+		"keys_count", len(cfg.APIKeys),
+	)
+
+	router := httpapi.NewRouter(
+		logger,
+		publisher,
+		cfg.TelemetrySubject,
+		repository,
+		cfg.IngestMaxBodyBytes,
+		authConfig,
+	)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,

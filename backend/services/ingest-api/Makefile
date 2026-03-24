@@ -1,4 +1,4 @@
-.PHONY: run lint test e2e perf simulate
+.PHONY: run lint test integration e2e perf simulate
 
 run:
 	go run ./cmd/api
@@ -9,6 +9,9 @@ lint:
 
 test:
 	go test ./...
+
+integration:
+	go test -count=1 -tags=integration ./tests/integration -v
 
 e2e:
 	go test -count=1 -tags=e2e ./tests/e2e -v

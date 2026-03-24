@@ -1,4 +1,4 @@
-# MVP Bitcoin Mining - Kickoff D1-D43
+# MVP Bitcoin Mining - Kickoff D1-D47
 
 ## Estado
 - [x] D1: Objetivo del MVP, alcance y no-objetivos
@@ -44,6 +44,10 @@
 - [x] D41: Endpoint por sitio/rack con filtros
 - [x] D42: Endpoint por maquina y rango temporal
 - [x] D43: Pruebas de performance con 100 ASICs
+- [x] D44: Revision semanal + acciones correctivas
+- [x] D45: Implementar autenticacion basica API
+- [x] D46: Escribir pruebas de integracion API/DB
+- [x] D47: Publicar documentacion OpenAPI minima
 
 ## Navegacion
 - [D1 Objetivo y Alcance](./D1_objetivo_alcance.md)
@@ -89,8 +93,12 @@
 - [D41 Endpoint por sitio/rack](./D41_endpoint_sitio_rack_con_filtros.md)
 - [D42 Endpoint por maquina y rango temporal](./D42_endpoint_maquina_rango_temporal.md)
 - [D43 Pruebas de performance 100 ASICs](./D43_pruebas_performance_100_asics.md)
+- [D44 Revision semanal y acciones correctivas](./D44_revision_semanal_acciones_correctivas.md)
+- [D45 Autenticacion basica API](./D45_autenticacion_basica_api.md)
+- [D46 Pruebas de integracion API/DB](./D46_pruebas_integracion_api_db.md)
+- [D47 OpenAPI minimo](./D47_openapi_minimo.md)
 
 ## Siguiente ejecucion sugerida (S2)
-- D44+: Observabilidad avanzada (Prometheus + OTel) en ingest/processor/read API.
-- D44+: Seguridad baseline (API keys y rate limiting por sitio).
-- D44+: Hardening de operacion DLQ (replay y consola de inspeccion).
+- D48-D50: Dashboard v0 + filtros + detalle por maquina.
+- D51: Revision semanal y priorizacion de alertas.
+- D52-D58: Motor de reglas, deduplicacion y notificaciones.

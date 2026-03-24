@@ -11,6 +11,9 @@ type Config struct {
 	Port                string
 	GinMode             string
 	LogLevel            string
+	APIAuthEnabled      bool
+	APIKeyHeader        string
+	APIKeys             []string
 	NATSURL             string
 	TelemetrySubject    string
 	TelemetryStream     string
@@ -28,6 +31,9 @@ func LoadConfig() Config {
 		Port:                getEnv("APP_PORT", "8080"),
 		GinMode:             getEnv("GIN_MODE", "release"),
 		LogLevel:            getEnv("LOG_LEVEL", "info"),
+		APIAuthEnabled:      getEnvAsBool("API_AUTH_ENABLED", false),
+		APIKeyHeader:        getEnv("API_KEY_HEADER", "X-API-Key"),
+		APIKeys:             getEnvAsList("API_KEYS"),
 		NATSURL:             getEnv("NATS_URL", "nats://localhost:4222"),
 		TelemetrySubject:    getEnv("TELEMETRY_SUBJECT", "telemetry.raw.v1"),
 		TelemetryStream:     getEnv("TELEMETRY_STREAM", "TELEMETRY"),
@@ -106,4 +112,28 @@ func getEnvAsDuration(key string, fallback time.Duration) time.Duration {
 	}
 
 	return parsed
+}
+
+func getEnvAsList(key string) []string {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return nil
+	}
+
+	parts := strings.Split(raw, ",")
+	values := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, part := range parts {
+		value := strings.TrimSpace(part)
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		values = append(values, value)
+	}
+
+	return values
 }

@@ -15,6 +15,7 @@ func NewRouter(
 	telemetrySubject string,
 	repository storage.Repository,
 	ingestMaxBodyBytes int64,
+	authConfig APIKeyAuthConfig,
 ) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -29,6 +30,7 @@ func NewRouter(
 	})
 
 	v1 := router.Group("/v1")
+	v1.Use(APIKeyAuthMiddleware(logger, authConfig))
 	{
 		v1.POST("/telemetry/ingest", telemetryHandler.Ingest)
 		v1.GET("/telemetry/readings", telemetryReadHandler.Readings)

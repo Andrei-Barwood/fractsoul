@@ -19,6 +19,8 @@ func TestIngestPublishesToNATS(t *testing.T) {
 	apiURL := getEnv("E2E_API_URL", "http://localhost:8080")
 	natsURL := getEnv("E2E_NATS_URL", "nats://localhost:4222")
 	subject := getEnv("E2E_TELEMETRY_SUBJECT", "telemetry.raw.v1")
+	apiKey := getEnv("E2E_API_KEY", "")
+	apiKeyHeader := getEnv("E2E_API_KEY_HEADER", "X-API-Key")
 
 	nc, err := nats.Connect(natsURL, nats.Timeout(5*time.Second))
 	if err != nil {
@@ -64,6 +66,9 @@ func TestIngestPublishesToNATS(t *testing.T) {
 		t.Fatalf("build request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		req.Header.Set(apiKeyHeader, apiKey)
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

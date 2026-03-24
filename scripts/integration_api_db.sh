@@ -8,14 +8,14 @@ API_KEY_HEADER="${API_KEY_HEADER:-X-API-Key}"
 echo "[1/2] Applying migrations..."
 "${ROOT_DIR}/scripts/migrate_timescaledb.sh"
 
-echo "[2/2] Running perf test (100 ASICs)..."
+echo "[2/2] Running integration tests (API/DB)..."
 (
   cd "${ROOT_DIR}/backend/services/ingest-api"
   if [[ -n "${API_KEY}" ]]; then
-    export PERF_API_KEY="${API_KEY}"
-    export PERF_API_KEY_HEADER="${API_KEY_HEADER}"
+    export INTEGRATION_API_KEY="${API_KEY}"
+    export INTEGRATION_API_KEY_HEADER="${API_KEY_HEADER}"
   fi
-  go test -count=1 -tags=perf ./tests/perf -v
+  go test -count=1 -tags=integration ./tests/integration -v
 )
 
-echo "Performance check completed."
+echo "Integration tests completed."
