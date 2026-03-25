@@ -207,7 +207,7 @@ func (d *Dispatcher) Close() {
 	if d == nil {
 		return
 	}
-	
+
 	d.once.Do(func() {
 		close(d.stopCh)
 		close(d.jobs)

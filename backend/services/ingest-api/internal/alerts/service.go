@@ -52,11 +52,11 @@ func NewService(
 
 	if len(notifiers) > 0 {
 		dispatcher := NewDispatcher(logger, repo, DispatchConfig{
-			Timeout:     cfg.NotifyTimeout,
-			MaxRetries:  cfg.NotifyRetries,
+			Timeout:      cfg.NotifyTimeout,
+			MaxRetries:   cfg.NotifyRetries,
 			RetryBackoff: cfg.RetryBackoff,
-			QueueSize:   cfg.QueueSize,
-			WorkerCount: cfg.WorkerCount,
+			QueueSize:    cfg.QueueSize,
+			WorkerCount:  cfg.WorkerCount,
 		}, notifiers)
 		dispatcher.Start()
 		service.dispatcher = dispatcher

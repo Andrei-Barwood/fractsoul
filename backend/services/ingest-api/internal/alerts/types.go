@@ -35,21 +35,21 @@ const (
 )
 
 type EvaluatedAlert struct {
-	RuleID        string
-	RuleName      string
-	Severity      Severity
-	Message       string
-	MetricName    string
-	MetricValue   float64
-	Threshold     float64
-	ObservedAt    time.Time
-	SiteID        string
-	RackID        string
-	MinerID       string
-	EventID       string
-	MinerModel    string
-	Firmware      string
-	Details       map[string]any
+	RuleID      string
+	RuleName    string
+	Severity    Severity
+	Message     string
+	MetricName  string
+	MetricValue float64
+	Threshold   float64
+	ObservedAt  time.Time
+	SiteID      string
+	RackID      string
+	MinerID     string
+	EventID     string
+	MinerModel  string
+	Firmware    string
+	Details     map[string]any
 }
 
 type PersistInput struct {
@@ -60,32 +60,32 @@ type PersistInput struct {
 }
 
 type PersistedAlert struct {
-	AlertID           string
-	RuleID            string
-	RuleName          string
-	Severity          Severity
-	Status            Status
-	Message           string
-	Fingerprint       string
-	DedupeKey         string
-	SiteID            string
-	RackID            string
-	MinerID           string
-	EventID           string
-	MinerModel        string
-	Firmware          string
-	MetricName        string
-	MetricValue       float64
-	Threshold         float64
-	FirstSeenAt       time.Time
-	LastSeenAt        time.Time
-	SuppressionUntil  time.Time
-	Occurrences       int
-	NotifyCount       int
-	LastNotifiedAt    *time.Time
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
-	Details           map[string]any
+	AlertID          string
+	RuleID           string
+	RuleName         string
+	Severity         Severity
+	Status           Status
+	Message          string
+	Fingerprint      string
+	DedupeKey        string
+	SiteID           string
+	RackID           string
+	MinerID          string
+	EventID          string
+	MinerModel       string
+	Firmware         string
+	MetricName       string
+	MetricValue      float64
+	Threshold        float64
+	FirstSeenAt      time.Time
+	LastSeenAt       time.Time
+	SuppressionUntil time.Time
+	Occurrences      int
+	NotifyCount      int
+	LastNotifiedAt   *time.Time
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	Details          map[string]any
 }
 
 type UpsertResult struct {
@@ -96,15 +96,15 @@ type UpsertResult struct {
 }
 
 type NotificationRecord struct {
-	AlertID       string
-	Channel       NotificationChannel
-	Destination   string
-	Status        NotificationStatus
-	Attempt       int
-	ErrorMessage  string
-	ResponseCode  int
-	Payload       map[string]any
-	NotifiedAt    time.Time
+	AlertID      string
+	Channel      NotificationChannel
+	Destination  string
+	Status       NotificationStatus
+	Attempt      int
+	ErrorMessage string
+	ResponseCode int
+	Payload      map[string]any
+	NotifiedAt   time.Time
 }
 
 type DeliveryResult struct {
