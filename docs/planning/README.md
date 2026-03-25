@@ -1,4 +1,4 @@
-# MVP Bitcoin Mining - Kickoff D1-D88
+# MVP Bitcoin Mining - Kickoff D1-D90
 
 ## Estado
 - [x] D1: Objetivo del MVP, alcance y no-objetivos
@@ -89,6 +89,8 @@
 - [x] D86: Benchmark pre/post (J/TH, alert latency)
 - [x] D87: Preparar demo final de 5 minutos
 - [x] D88: Ejecutar demo y capturar feedback
+- [x] D89: Documentar resultados + proximos 90 dias
+- [x] D90: Retro final + backlog priorizado para S4
 
 ## Navegacion
 - [D1 Objetivo y Alcance](./D1_objetivo_alcance.md)
@@ -179,7 +181,10 @@
 - [D86 Benchmark pre/post JTH alert latency](./D86_benchmark_pre_post_jth_alert_latency.md)
 - [D87 Preparar demo final de 5 minutos](./D87_preparar_demo_final_5_minutos.md)
 - [D88 Ejecutar demo y capturar feedback](./D88_ejecutar_demo_capturar_feedback.md)
+- [D89 Documentar resultados + proximos 90 dias](./D89_documentar_resultados_proximos_90_dias.md)
+- [D90 Retro final + backlog priorizado para S4](./D90_retro_final_backlog_priorizado_s4.md)
 
-## Siguiente ejecucion sugerida (S3 cierre)
-- Documentar resultados de S3 y plan de proximos 90 dias (D89).
-- Ejecutar retro final y backlog priorizado para S4 (D90).
+## Siguiente ejecucion sugerida (inicio S4)
+- Iniciar bloque P0 de seguridad operativa y RBAC por alcance.
+- Implementar outbox de notificaciones y politicas de retry por canal.
+- Definir SLOs formales y dashboard de seguimiento para operacion diaria.
