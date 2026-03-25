@@ -7,8 +7,8 @@ Monorepo base para el MVP de operacion de granjas de Bitcoin mining.
 - `backend/services/ingest-api`: servicio de ingesta + lectura de telemetria (Go + Gin + NATS + Postgres).
 - `frontend/apps/dashboard`: placeholder de UI operativa.
 - `infra/docker`: recursos de contenedores para desarrollo local.
-- `docs/planning`: documentos de ejecucion D1-D86 y ADRs.
-- `docs/operations`: evidencias operativas (backup/restore, resiliencia, benchmark).
+- `docs/planning`: documentos de ejecucion D1-D88 y ADRs.
+- `docs/operations`: evidencias operativas (backup/restore, resiliencia, benchmark, demo final).
 - `docs/contracts`: contratos JSON/schema.
 - `docs/engineering`: convenciones tecnicas.
 
@@ -124,6 +124,12 @@ curl "http://localhost:8080/v1/anomalies/miners/asic-000001/analyze?resolution=m
 ./scripts/test_backup_restore.sh
 ./scripts/test_resilience_restart_failover.sh
 ./scripts/benchmark_pre_post.sh
+```
+
+16. Demo final S3 (5 minutos):
+
+```bash
+./scripts/demo_s3_final_5min.sh
 ```
 
 ## CI

@@ -166,6 +166,7 @@ E2E full stack desde raiz del repo:
 ./scripts/test_backup_restore.sh
 ./scripts/test_resilience_restart_failover.sh
 ./scripts/benchmark_pre_post.sh
+./scripts/demo_s3_final_5min.sh
 ```
 
 ## Simulador ASIC

@@ -1,4 +1,4 @@
-# MVP Bitcoin Mining - Kickoff D1-D86
+# MVP Bitcoin Mining - Kickoff D1-D88
 
 ## Estado
 - [x] D1: Objetivo del MVP, alcance y no-objetivos
@@ -87,6 +87,8 @@
 - [x] D84: Prueba de backup/restore
 - [x] D85: Prueba de resiliencia (restart/failover simple)
 - [x] D86: Benchmark pre/post (J/TH, alert latency)
+- [x] D87: Preparar demo final de 5 minutos
+- [x] D88: Ejecutar demo y capturar feedback
 
 ## Navegacion
 - [D1 Objetivo y Alcance](./D1_objetivo_alcance.md)
@@ -175,9 +177,9 @@
 - [D84 Prueba backup restore](./D84_prueba_backup_restore.md)
 - [D85 Prueba resiliencia restart failover simple](./D85_prueba_resiliencia_restart_failover_simple.md)
 - [D86 Benchmark pre/post JTH alert latency](./D86_benchmark_pre_post_jth_alert_latency.md)
+- [D87 Preparar demo final de 5 minutos](./D87_preparar_demo_final_5_minutos.md)
+- [D88 Ejecutar demo y capturar feedback](./D88_ejecutar_demo_capturar_feedback.md)
 
 ## Siguiente ejecucion sugerida (S3 cierre)
-- Preparar demo final de 5 minutos con guion y checklist.
-- Ejecutar demo y capturar feedback de audiencia tecnica.
-- Documentar resultados y plan de proximos 90 dias.
-- Cerrar retro final y backlog priorizado para S4.
+- Documentar resultados de S3 y plan de proximos 90 dias (D89).
+- Ejecutar retro final y backlog priorizado para S4 (D90).

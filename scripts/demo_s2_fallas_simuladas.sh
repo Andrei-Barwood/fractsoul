@@ -96,6 +96,9 @@ WHERE alert_id IN (
 DELETE FROM alerts
 WHERE miner_id IN ('asic-920001', 'asic-920002', 'asic-920003', 'asic-920004');
 
+DELETE FROM recommendation_changes
+WHERE miner_id IN ('asic-920001', 'asic-920002', 'asic-920003', 'asic-920004');
+
 DELETE FROM telemetry_readings
 WHERE miner_id IN ('asic-920001', 'asic-920002', 'asic-920003', 'asic-920004');
 
