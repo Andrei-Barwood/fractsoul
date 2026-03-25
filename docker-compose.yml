@@ -44,6 +44,27 @@ services:
       retries: 5
       start_period: 10s
 
+  daily-reporter:
+    build:
+      context: ./backend/services/ingest-api
+      dockerfile: Dockerfile.reporter
+    container_name: fractsoul-daily-reporter
+    command:
+      - "-mode=daemon"
+    environment:
+      LOG_LEVEL: info
+      DATABASE_URL: postgres://postgres:postgres@timescaledb:5432/mining?sslmode=disable
+      REPORT_TIMEZONE: America/Santiago
+      REPORT_SCHEDULE: "08:00"
+      REPORT_RUN_ON_STARTUP: "true"
+      REPORT_OUTPUT_DIR: /reports
+    volumes:
+      - ./docs/reports:/reports
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    restart: unless-stopped
+
   timescaledb:
     image: timescale/timescaledb:2.15.3-pg16
     container_name: fractsoul-timescaledb

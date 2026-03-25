@@ -7,7 +7,7 @@ Monorepo base para el MVP de operacion de granjas de Bitcoin mining.
 - `backend/services/ingest-api`: servicio de ingesta + lectura de telemetria (Go + Gin + NATS + Postgres).
 - `frontend/apps/dashboard`: placeholder de UI operativa.
 - `infra/docker`: recursos de contenedores para desarrollo local.
-- `docs/planning`: documentos de ejecucion D1-D78 y ADRs.
+- `docs/planning`: documentos de ejecucion D1-D81 y ADRs.
 - `docs/contracts`: contratos JSON/schema.
 - `docs/engineering`: convenciones tecnicas.
 
@@ -100,6 +100,12 @@ make simulate
 ```bash
 curl "http://localhost:8080/v1/efficiency/miners?window_minutes=120&limit=5"
 curl "http://localhost:8080/v1/anomalies/miners/asic-000001/analyze?resolution=minute&limit=120"
+```
+
+14. Generar reporte diario ejecutivo-operativo (S3):
+
+```bash
+./scripts/generate_daily_report.sh
 ```
 
 ## CI

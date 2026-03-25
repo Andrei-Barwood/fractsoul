@@ -1,4 +1,4 @@
-# MVP Bitcoin Mining - Kickoff D1-D78
+# MVP Bitcoin Mining - Kickoff D1-D81
 
 ## Estado
 - [x] D1: Objetivo del MVP, alcance y no-objetivos
@@ -79,6 +79,9 @@
 - [x] D76: Estimador de impacto pre/post cambio
 - [x] D77: Guardrails de seguridad para recomendaciones
 - [x] D78: Bitacora de cambios + rollback logico
+- [x] D79: Job de reporte diario automatico
+- [x] D80: Plantilla de reporte ejecutivo-operativo
+- [x] D81: Revision semanal + cierre tecnico
 
 ## Navegacion
 - [D1 Objetivo y Alcance](./D1_objetivo_alcance.md)
@@ -159,8 +162,11 @@
 - [D76 Estimador impacto pre/post cambio](./D76_estimador_impacto_pre_post_cambio.md)
 - [D77 Guardrails seguridad recomendaciones](./D77_guardrails_seguridad_recomendaciones.md)
 - [D78 Bitacora cambios y rollback logico](./D78_bitacora_cambios_rollback_logico.md)
+- [D79 Job reporte diario automatico](./D79_job_reporte_diario_automatico.md)
+- [D80 Plantilla reporte ejecutivo-operativo](./D80_plantilla_reporte_ejecutivo_operativo.md)
+- [D81 Revision semanal y cierre tecnico](./D81_revision_semanal_cierre_tecnico.md)
 
 ## Siguiente ejecucion sugerida (S3)
-- Automatizar reporte diario de eficiencia/anomalias por sitio.
-- Añadir feedback loop de operador para mejorar causa probable/recomendaciones.
-- Evolucionar de reglas estáticas a modelos adaptativos por estación y carga.
+- Instrumentar observabilidad de servicio (metricas + trazabilidad de latencias).
+- Fortalecer hardening (auth, RBAC minimo y manejo de secretos).
+- Ejecutar pruebas de backup/restore y resiliencia con playbooks operativos.

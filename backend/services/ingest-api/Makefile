@@ -1,4 +1,4 @@
-.PHONY: run lint test integration e2e alerts-e2e perf simulate
+.PHONY: run lint test integration e2e alerts-e2e perf simulate report-once report-daemon
 
 run:
 	go run ./cmd/api
@@ -24,3 +24,9 @@ perf:
 
 simulate:
 	go run ./cmd/simulator -miners=100 -duration=2m -tick=5s
+
+report-once:
+	go run ./cmd/reporter -mode once
+
+report-daemon:
+	go run ./cmd/reporter -mode daemon

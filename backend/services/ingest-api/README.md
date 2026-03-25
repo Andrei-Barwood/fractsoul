@@ -43,6 +43,12 @@ Variables:
 - `ALERT_EMAIL_FROM` (default `alerts@fractsoul.local`)
 - `ALERT_EMAIL_TO` (lista separada por comas)
 - `ALERT_EMAIL_SUBJECT_PREFIX` (default `[Fractsoul Alert]`)
+- `REPORT_MODE` (`once|daemon`, default `once`)
+- `REPORT_DATE` (opcional `YYYY-MM-DD` para modo `once`)
+- `REPORT_TIMEZONE` (default `UTC`)
+- `REPORT_SCHEDULE` (default `08:00`, usado en modo `daemon`)
+- `REPORT_RUN_ON_STARTUP` (default `true`)
+- `REPORT_OUTPUT_DIR` (opcional, guarda markdown generado)
 
 ## Endpoints
 - `GET /healthz`
@@ -121,12 +127,25 @@ Prueba E2E de alertas (dedupe/supresion):
 make alerts-e2e
 ```
 
+Reporte diario (una ejecucion):
+
+```bash
+make report-once
+```
+
+Reporte diario en modo daemon:
+
+```bash
+make report-daemon
+```
+
 E2E full stack desde raiz del repo:
 
 ```bash
 ./scripts/e2e_simulator_db_api.sh
 ./scripts/e2e_alerts_flow.sh
 ./scripts/demo_s2_fallas_simuladas.sh
+./scripts/generate_daily_report.sh
 ```
 
 ## Simulador ASIC

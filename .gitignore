@@ -8,3 +8,6 @@
 **/bin/
 **/coverage.out
 **/.coverprofile
+
+# Generated daily reports (D79-D81)
+docs/reports/*.md
