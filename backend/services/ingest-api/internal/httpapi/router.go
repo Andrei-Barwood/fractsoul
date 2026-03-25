@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/observability"
 	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/storage"
 	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/telemetry"
 	"github.com/gin-gonic/gin"
@@ -39,6 +40,7 @@ func NewRouter(
 	router.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+	router.GET("/metrics", gin.WrapH(observability.MetricsHandler()))
 
 	v1 := router.Group("/v1")
 	v1.Use(APIKeyAuthMiddleware(logger, authConfig))

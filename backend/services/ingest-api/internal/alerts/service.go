@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/observability"
 	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/telemetry"
 )
 
@@ -108,6 +109,13 @@ func (s *Service) ProcessEvent(ctx context.Context, event telemetry.IngestReques
 
 		result, err := s.repo.UpsertAlert(ctx, input)
 		if err != nil {
+			observability.RecordAlertEvaluation(
+				candidate.RuleID,
+				string(candidate.Severity),
+				"upsert_error",
+				false,
+				false,
+			)
 			s.logger.Error(
 				"failed to upsert alert",
 				"rule_id", candidate.RuleID,
@@ -120,6 +128,14 @@ func (s *Service) ProcessEvent(ctx context.Context, event telemetry.IngestReques
 			}
 			continue
 		}
+
+		observability.RecordAlertEvaluation(
+			result.Alert.RuleID,
+			string(result.Alert.Severity),
+			string(result.Alert.Status),
+			result.ShouldNotify,
+			result.Suppressed,
+		)
 
 		s.logger.Warn(
 			"alert evaluated",
@@ -135,6 +151,7 @@ func (s *Service) ProcessEvent(ctx context.Context, event telemetry.IngestReques
 
 		if result.ShouldNotify && s.dispatcher != nil {
 			if err := s.dispatcher.Enqueue(result.Alert); err != nil {
+				observability.RecordAlertNotification("dispatcher", "enqueue_error", 0)
 				s.logger.Error(
 					"failed to enqueue alert notification",
 					"alert_id", result.Alert.AlertID,

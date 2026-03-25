@@ -17,7 +17,8 @@ import (
 )
 
 func Run(ctx context.Context, cfg Config) error {
-	logger := observability.NewLogger(cfg.LogLevel)
+	baseLogger := observability.NewLogger(cfg.LogLevel).With("service", "ingest-api")
+	logger := baseLogger.With("component", "app")
 	gin.SetMode(cfg.GinMode)
 
 	if cfg.APIAuthEnabled && len(cfg.APIKeys) == 0 {
@@ -92,7 +93,7 @@ func Run(ctx context.Context, cfg Config) error {
 			}
 
 			alertService, err := alerts.NewService(
-				logger,
+				baseLogger.With("component", "alerts"),
 				alertRepo,
 				alerts.ServiceConfig{
 					Enabled:           cfg.AlertsEnabled,
@@ -133,7 +134,13 @@ func Run(ctx context.Context, cfg Config) error {
 			RetryDelay: cfg.ProcessorRetryDelay,
 		}
 
-		consumer, err := processor.NewConsumer(logger, repository, alertHandler, cfg.NATSURL, consumerCfg)
+		consumer, err := processor.NewConsumer(
+			baseLogger.With("component", "processor"),
+			repository,
+			alertHandler,
+			cfg.NATSURL,
+			consumerCfg,
+		)
 		if err != nil {
 			return fmt.Errorf("start telemetry processor: %w", err)
 		}
@@ -172,7 +179,7 @@ func Run(ctx context.Context, cfg Config) error {
 	)
 
 	router := httpapi.NewRouter(
-		logger,
+		baseLogger.With("component", "httpapi"),
 		publisher,
 		cfg.TelemetrySubject,
 		repository,

@@ -219,6 +219,28 @@ func TestAuthAllowsHealthzWithoutAPIKey(t *testing.T) {
 	}
 }
 
+func TestAuthAllowsMetricsWithoutAPIKey(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	publisher := &stubPublisher{}
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", nil, 1<<20, APIKeyAuthConfig{
+		Enabled: true,
+		Header:  "X-API-Key",
+		Keys:    []string{"test-key"},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, resp.Code)
+	}
+	if !strings.Contains(resp.Body.String(), "fractsoul_http_requests_total") {
+		t.Fatalf("expected metrics payload, got %s", resp.Body.String())
+	}
+}
+
 func TestDashboardRouteIsServed(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	publisher := &stubPublisher{}

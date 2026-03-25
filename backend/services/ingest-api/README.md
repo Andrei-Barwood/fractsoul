@@ -52,6 +52,7 @@ Variables:
 
 ## Endpoints
 - `GET /healthz`
+- `GET /metrics`
 - `POST /v1/telemetry/ingest`
 - `GET /v1/telemetry/readings`
 - `GET /v1/telemetry/summary`
@@ -92,6 +93,12 @@ Dashboard v0:
 
 ```bash
 open http://localhost:8080/dashboard/
+```
+
+Métricas Prometheus:
+
+```bash
+curl -s http://localhost:8080/metrics | head -40
 ```
 
 ## Validacion y errores

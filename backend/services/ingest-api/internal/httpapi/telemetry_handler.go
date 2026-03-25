@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/observability"
 	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/telemetry"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -43,6 +44,7 @@ func NewTelemetryHandler(logger *slog.Logger, publisher telemetry.Publisher, sub
 
 func (h *TelemetryHandler) Ingest(c *gin.Context) {
 	if !isJSONContentType(c.GetHeader("Content-Type")) {
+		observability.RecordIngestEvent("rejected", "unsupported_media_type", 0)
 		WriteError(
 			c,
 			http.StatusUnsupportedMediaType,
@@ -55,12 +57,14 @@ func (h *TelemetryHandler) Ingest(c *gin.Context) {
 
 	request, ingestErr := h.decodeAndValidateRequest(c)
 	if ingestErr != nil {
+		observability.RecordIngestEvent("rejected", ingestErr.Code, 0)
 		WriteError(c, ingestErr.Status, ingestErr.Code, ingestErr.Message, ingestErr.Details)
 		return
 	}
 
 	now := time.Now().UTC()
 	if request.Timestamp.After(now.Add(maxFutureTimestampSkew)) {
+		observability.RecordIngestEvent("rejected", "timestamp_out_of_range", 0)
 		WriteError(
 			c,
 			http.StatusUnprocessableEntity,
@@ -73,6 +77,7 @@ func (h *TelemetryHandler) Ingest(c *gin.Context) {
 
 	siteID, rackID, minerID, err := telemetry.NormalizeOperationalIDs(request.SiteID, request.RackID, request.MinerID)
 	if err != nil {
+		observability.RecordIngestEvent("rejected", "invalid_operational_ids", 0)
 		WriteError(
 			c,
 			http.StatusBadRequest,
@@ -96,6 +101,7 @@ func (h *TelemetryHandler) Ingest(c *gin.Context) {
 
 	payload, err := json.Marshal(request)
 	if err != nil {
+		observability.RecordIngestEvent("internal_error", "encode_payload_failed", 0)
 		WriteError(
 			c,
 			http.StatusInternalServerError,
@@ -110,6 +116,7 @@ func (h *TelemetryHandler) Ingest(c *gin.Context) {
 		"X-Request-ID": response.RequestID,
 		"X-Event-ID":   request.EventID,
 	}); err != nil {
+		observability.RecordIngestEvent("publish_error", "dependency_unavailable", len(payload))
 		h.logger.Error(
 			"failed to publish telemetry",
 			"request_id", response.RequestID,
@@ -126,6 +133,7 @@ func (h *TelemetryHandler) Ingest(c *gin.Context) {
 		return
 	}
 
+	observability.RecordIngestEvent("accepted", "none", len(payload))
 	h.logger.Info(
 		"telemetry accepted",
 		"request_id", response.RequestID,

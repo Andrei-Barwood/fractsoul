@@ -25,6 +25,12 @@ docker compose up --build
 curl http://localhost:8080/healthz
 ```
 
+Métricas de observabilidad:
+
+```bash
+curl -s http://localhost:8080/metrics | head -40
+```
+
 Dashboard operativo v0:
 
 ```bash

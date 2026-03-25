@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/observability"
 	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/storage"
 	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/telemetry"
 	"github.com/nats-io/nats.go"
@@ -148,6 +149,8 @@ func (c *Consumer) Start() error {
 }
 
 func (c *Consumer) handleMessage(msg *nats.Msg) {
+	startedAt := time.Now()
+
 	numDelivered := uint64(1)
 	if metadata, err := msg.Metadata(); err == nil && metadata != nil {
 		numDelivered = metadata.NumDelivered
@@ -155,7 +158,13 @@ func (c *Consumer) handleMessage(msg *nats.Msg) {
 
 	event, err := decodeAndNormalizeEvent(msg.Data)
 	if err != nil {
-		c.handleTerminalFailure(msg, nil, numDelivered, fmt.Errorf("decode/normalize event: %w", err))
+		c.handleTerminalFailure(
+			msg,
+			nil,
+			numDelivered,
+			fmt.Errorf("decode/normalize event: %w", err),
+			startedAt,
+		)
 		return
 	}
 
@@ -164,7 +173,13 @@ func (c *Consumer) handleMessage(msg *nats.Msg) {
 
 	if err := c.repo.PersistTelemetry(persistCtx, event, msg.Data); err != nil {
 		if int(numDelivered) >= c.cfg.MaxDeliver {
-			c.handleTerminalFailure(msg, &event, numDelivered, fmt.Errorf("persist telemetry: %w", err))
+			c.handleTerminalFailure(
+				msg,
+				&event,
+				numDelivered,
+				fmt.Errorf("persist telemetry: %w", err),
+				startedAt,
+			)
 			return
 		}
 
@@ -181,7 +196,10 @@ func (c *Consumer) handleMessage(msg *nats.Msg) {
 		)
 		if nakErr := msg.NakWithDelay(c.cfg.RetryDelay); nakErr != nil {
 			c.logger.Error("failed to nak message for retry", "error", nakErr)
+			observability.RecordProcessorEvent("retry_nak_error", time.Since(startedAt))
+			return
 		}
+		observability.RecordProcessorEvent("retry_scheduled", time.Since(startedAt))
 		return
 	}
 
@@ -196,22 +214,37 @@ func (c *Consumer) handleMessage(msg *nats.Msg) {
 				"miner_id", event.MinerID,
 				"error", err,
 			)
+			observability.RecordProcessorEvent("alerts_error", time.Since(startedAt))
 		}
 		cancelAlert()
 	}
 
 	if err := msg.Ack(); err != nil {
 		c.logger.Error("failed to ack processed telemetry message", "error", err)
+		observability.RecordProcessorEvent("ack_error", time.Since(startedAt))
+		return
 	}
+
+	observability.RecordProcessorEvent("persisted", time.Since(startedAt))
 }
 
-func (c *Consumer) handleTerminalFailure(msg *nats.Msg, event *telemetry.IngestRequest, numDelivered uint64, reason error) {
+func (c *Consumer) handleTerminalFailure(
+	msg *nats.Msg,
+	event *telemetry.IngestRequest,
+	numDelivered uint64,
+	reason error,
+	startedAt time.Time,
+) {
 	if err := c.publishDLQ(msg, event, numDelivered, reason); err != nil {
 		c.logger.Error("failed to publish message to dlq", "error", err)
+		observability.RecordProcessorEvent("dlq_publish_error", time.Since(startedAt))
+	} else {
+		observability.RecordProcessorEvent("moved_dlq", time.Since(startedAt))
 	}
 
 	if err := msg.Ack(); err != nil {
 		c.logger.Error("failed to ack terminal failed message", "error", err)
+		observability.RecordProcessorEvent("ack_error", time.Since(startedAt))
 	}
 
 	attrs := []any{
@@ -219,7 +252,7 @@ func (c *Consumer) handleTerminalFailure(msg *nats.Msg, event *telemetry.IngestR
 		"dlq_subject", c.cfg.DLQSubject,
 		"num_delivered", numDelivered,
 		"max_deliver", c.cfg.MaxDeliver,
-		"error", reason,
+		"failure_reason", reason.Error(),
 	}
 	if event != nil {
 		attrs = append(attrs,

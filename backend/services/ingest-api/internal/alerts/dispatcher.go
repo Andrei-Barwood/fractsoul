@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/observability"
 )
 
 type DispatchConfig struct {
@@ -116,12 +118,15 @@ func (d *Dispatcher) dispatchAlert(workerID int, alert PersistedAlert) {
 	for _, notifier := range d.notifiers {
 		delivered := false
 		for attempt := 1; attempt <= d.cfg.MaxRetries; attempt++ {
+			attemptStartedAt := time.Now()
 			ctx, cancel := context.WithTimeout(context.Background(), d.cfg.Timeout)
 			result, err := notifier.Notify(ctx, alert)
 			cancel()
+			attemptDuration := time.Since(attemptStartedAt)
 
 			if err == nil {
 				delivered = true
+				observability.RecordAlertNotification(string(notifier.Channel()), "sent", attemptDuration)
 				d.logger.Info(
 					"alert notification sent",
 					"worker", workerID,
@@ -155,6 +160,7 @@ func (d *Dispatcher) dispatchAlert(workerID int, alert PersistedAlert) {
 			)
 
 			if attempt == d.cfg.MaxRetries {
+				observability.RecordAlertNotification(string(notifier.Channel()), "failed", attemptDuration)
 				d.recordNotification(NotificationRecord{
 					AlertID:      alert.AlertID,
 					Channel:      notifier.Channel(),
@@ -187,6 +193,7 @@ func (d *Dispatcher) recordNotification(record NotificationRecord) {
 		return
 	}
 	if err := d.repo.RecordAlertNotification(context.Background(), record); err != nil {
+		observability.RecordAlertNotification(string(record.Channel), "persist_error", 0)
 		d.logger.Error(
 			"failed to persist alert notification",
 			"alert_id", record.AlertID,

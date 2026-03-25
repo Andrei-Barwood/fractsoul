@@ -25,7 +25,7 @@ func main() {
 	flag.Parse()
 
 	logLevel := envOrDefault("LOG_LEVEL", "info")
-	logger := observability.NewLogger(logLevel)
+	logger := observability.NewLogger(logLevel).With("service", "daily-reporter", "component", "reporter")
 
 	databaseURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if databaseURL == "" {

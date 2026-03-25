@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/fractsoul/mvp/backend/services/ingest-api/internal/observability"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -25,7 +26,9 @@ func RequestIDMiddleware() gin.HandlerFunc {
 func AccessLogMiddleware(logger *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		startedAt := time.Now()
+		observability.IncHTTPInFlight()
 		c.Next()
+		observability.DecHTTPInFlight()
 
 		path := c.FullPath()
 		if path == "" {
@@ -33,12 +36,15 @@ func AccessLogMiddleware(logger *slog.Logger) gin.HandlerFunc {
 		}
 
 		status := c.Writer.Status()
+		duration := time.Since(startedAt)
+		observability.ObserveHTTPRequest(c.Request.Method, path, status, duration)
+
 		attributes := []any{
 			"request_id", RequestID(c),
 			"method", c.Request.Method,
 			"path", path,
 			"status", status,
-			"duration_ms", time.Since(startedAt).Milliseconds(),
+			"duration_ms", duration.Milliseconds(),
 			"client_ip", c.ClientIP(),
 		}
 

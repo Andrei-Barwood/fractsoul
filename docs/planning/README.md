@@ -1,4 +1,4 @@
-# MVP Bitcoin Mining - Kickoff D1-D81
+# MVP Bitcoin Mining - Kickoff D1-D82
 
 ## Estado
 - [x] D1: Objetivo del MVP, alcance y no-objetivos
@@ -82,6 +82,7 @@
 - [x] D79: Job de reporte diario automatico
 - [x] D80: Plantilla de reporte ejecutivo-operativo
 - [x] D81: Revision semanal + cierre tecnico
+- [x] D82: Observabilidad (metricas, logs estructurados)
 
 ## Navegacion
 - [D1 Objetivo y Alcance](./D1_objetivo_alcance.md)
@@ -165,6 +166,7 @@
 - [D79 Job reporte diario automatico](./D79_job_reporte_diario_automatico.md)
 - [D80 Plantilla reporte ejecutivo-operativo](./D80_plantilla_reporte_ejecutivo_operativo.md)
 - [D81 Revision semanal y cierre tecnico](./D81_revision_semanal_cierre_tecnico.md)
+- [D82 Observabilidad metricas y logs estructurados](./D82_observabilidad_metricas_logs_estructurados.md)
 
 ## Siguiente ejecucion sugerida (S3)
 - Instrumentar observabilidad de servicio (metricas + trazabilidad de latencias).
