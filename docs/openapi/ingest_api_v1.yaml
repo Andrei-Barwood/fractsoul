@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Fractsoul Ingest API
-  version: 1.1.0
+  version: 1.2.0
   description: >
     API de ingesta y lectura de telemetria para el MVP de operacion de granja ASIC.
     La autenticacion por API key es configurable via entorno (`API_AUTH_ENABLED`, `API_KEYS`).
@@ -362,6 +362,121 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /v1/anomalies/miners/{miner_id}/changes/apply:
+    post:
+      tags: [anomaly]
+      summary: Registra cambio recomendado (bitacora)
+      parameters:
+        - name: miner_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: resolution
+          in: query
+          schema:
+            type: string
+            enum: [minute, hour]
+            default: minute
+        - $ref: '#/components/parameters/from'
+        - $ref: '#/components/parameters/to'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/ambient_c'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecommendationChangeApplyRequest'
+      responses:
+        '201':
+          description: Cambio aplicado y auditado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  request_id:
+                    type: string
+                    format: uuid
+                  resolution:
+                    type: string
+                    enum: [minute, hour]
+                  from:
+                    type: string
+                    format: date-time
+                  to:
+                    type: string
+                    format: date-time
+                  summary_line:
+                    type: string
+                  change:
+                    $ref: '#/components/schemas/RecommendationChange'
+                  report:
+                    $ref: '#/components/schemas/AnomalyReport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/anomalies/changes/{change_id}/rollback:
+    post:
+      tags: [anomaly]
+      summary: Ejecuta rollback logico de un cambio aplicado
+      parameters:
+        - name: change_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecommendationChangeRollbackRequest'
+      responses:
+        '201':
+          description: Rollback logico registrado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  request_id:
+                    type: string
+                    format: uuid
+                  change:
+                    $ref: '#/components/schemas/RecommendationChange'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/anomalies/changes:
+    get:
+      tags: [anomaly]
+      summary: Lista bitacora de cambios recomendados
+      parameters:
+        - $ref: '#/components/parameters/miner_id'
+        - $ref: '#/components/parameters/change_status'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: Bitacora listada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  request_id:
+                    type: string
+                    format: uuid
+                  count:
+                    type: integer
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RecommendationChange'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -396,6 +511,12 @@ components:
       schema:
         type: string
         enum: [ok, warning, critical, offline]
+    change_status:
+      name: status
+      in: query
+      schema:
+        type: string
+        enum: [applied, rolled_back]
     from:
       name: from
       in: query
@@ -624,7 +745,52 @@ components:
       properties:
         parameter: { type: string }
         suggested_delta: { type: string }
+        requested_delta: { type: string }
         reason: { type: string }
+
+    GuardrailDecision:
+      type: object
+      properties:
+        parameter: { type: string }
+        requested_delta: { type: string }
+        applied_delta: { type: string }
+        action:
+          type: string
+          enum: [allow, clamped, blocked]
+        reason: { type: string }
+
+    ImpactSnapshot:
+      type: object
+      properties:
+        hashrate_ths: { type: number }
+        power_watts: { type: number }
+        temp_celsius: { type: number }
+        fan_rpm: { type: number }
+        compensated_jth: { type: number }
+
+    ImpactDelta:
+      type: object
+      properties:
+        hashrate_ths_pct: { type: number }
+        power_watts_pct: { type: number }
+        temp_celsius_delta: { type: number }
+        fan_rpm_pct: { type: number }
+        compensated_jth_pct: { type: number }
+
+    ImpactEstimate:
+      type: object
+      properties:
+        before:
+          $ref: '#/components/schemas/ImpactSnapshot'
+        after:
+          $ref: '#/components/schemas/ImpactSnapshot'
+        delta:
+          $ref: '#/components/schemas/ImpactDelta'
+        confidence: { type: number }
+        assumptions:
+          type: array
+          items:
+            type: string
 
     AnomalyReport:
       type: object
@@ -648,6 +814,60 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AnomalyRecommendation'
+        guardrails:
+          type: array
+          items:
+            $ref: '#/components/schemas/GuardrailDecision'
+        impact_estimate:
+          $ref: '#/components/schemas/ImpactEstimate'
+
+    RecommendationChangeApplyRequest:
+      type: object
+      properties:
+        reason: { type: string }
+        requested_by: { type: string }
+
+    RecommendationChangeRollbackRequest:
+      type: object
+      properties:
+        reason: { type: string }
+        requested_by: { type: string }
+
+    RecommendationChange:
+      type: object
+      properties:
+        change_id: { type: string }
+        parent_change_id: { type: string }
+        superseded_by_change_id: { type: string }
+        site_id: { type: string }
+        rack_id: { type: string }
+        miner_id: { type: string }
+        operation:
+          type: string
+          enum: [apply, rollback]
+        status:
+          type: string
+          enum: [applied, rolled_back]
+        reason: { type: string }
+        requested_by: { type: string }
+        summary: { type: string }
+        source_report:
+          type: object
+          additionalProperties: true
+        recommendations:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        impact_estimate:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        rolled_back_at:
+          type: string
+          format: date-time
 
     ErrorResponse:
       type: object

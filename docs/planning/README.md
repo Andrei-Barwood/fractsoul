@@ -1,4 +1,4 @@
-# MVP Bitcoin Mining - Kickoff D1-D75
+# MVP Bitcoin Mining - Kickoff D1-D78
 
 ## Estado
 - [x] D1: Objetivo del MVP, alcance y no-objetivos
@@ -76,6 +76,9 @@
 - [x] D73: Validacion con datos simulados y etiquetados
 - [x] D74: Revision semanal + tuning de umbrales
 - [x] D75: Recomendador v1 (freq/volt/fan)
+- [x] D76: Estimador de impacto pre/post cambio
+- [x] D77: Guardrails de seguridad para recomendaciones
+- [x] D78: Bitacora de cambios + rollback logico
 
 ## Navegacion
 - [D1 Objetivo y Alcance](./D1_objetivo_alcance.md)
@@ -153,6 +156,9 @@
 - [D73 Validacion con datos simulados y etiquetados](./D73_validacion_datos_simulados_etiquetados.md)
 - [D74 Revision semanal + tuning de umbrales](./D74_revision_semanal_tuning_umbrales.md)
 - [D75 Recomendador v1 freq/volt/fan](./D75_recomendador_v1_freq_volt_fan.md)
+- [D76 Estimador impacto pre/post cambio](./D76_estimador_impacto_pre_post_cambio.md)
+- [D77 Guardrails seguridad recomendaciones](./D77_guardrails_seguridad_recomendaciones.md)
+- [D78 Bitacora cambios y rollback logico](./D78_bitacora_cambios_rollback_logico.md)
 
 ## Siguiente ejecucion sugerida (S3)
 - Automatizar reporte diario de eficiencia/anomalias por sitio.

@@ -59,16 +59,23 @@ type stubRepository struct {
 	minerEfficiency    []storage.MinerEfficiency
 	rackEfficiency     []storage.RackEfficiency
 	siteEfficiency     []storage.SiteEfficiency
+	changes            []storage.RecommendationChange
 	listErr            error
 	summaryErr         error
 	seriesErr          error
 	minerEffErr        error
 	rackEffErr         error
 	siteEffErr         error
+	createChangeErr    error
+	rollbackChangeErr  error
+	listChangesErr     error
 	lastReadingsFilter storage.ReadingsFilter
 	lastSummaryFilter  storage.SummaryFilter
 	lastSeriesFilter   storage.MinerSeriesFilter
 	lastEffFilter      storage.EfficiencyFilter
+	lastChangeInput    storage.RecommendationChangeCreateInput
+	lastRollbackInput  storage.RecommendationRollbackInput
+	lastChangeFilter   storage.RecommendationChangeFilter
 }
 
 func (r *stubRepository) PersistTelemetry(_ context.Context, _ telemetry.IngestRequest, _ []byte) error {
@@ -121,6 +128,68 @@ func (r *stubRepository) ListSiteEfficiency(_ context.Context, filter storage.Ef
 		return nil, r.siteEffErr
 	}
 	return r.siteEfficiency, nil
+}
+
+func (r *stubRepository) CreateRecommendationChange(
+	_ context.Context,
+	input storage.RecommendationChangeCreateInput,
+) (storage.RecommendationChange, error) {
+	r.lastChangeInput = input
+	if r.createChangeErr != nil {
+		return storage.RecommendationChange{}, r.createChangeErr
+	}
+
+	if len(r.changes) > 0 {
+		return r.changes[0], nil
+	}
+
+	return storage.RecommendationChange{
+		ChangeID:    "change-1",
+		MinerID:     input.MinerID,
+		SiteID:      input.SiteID,
+		RackID:      input.RackID,
+		Operation:   storage.ChangeOperationApply,
+		Status:      storage.ChangeStatusApplied,
+		Reason:      input.Reason,
+		RequestedBy: input.RequestedBy,
+		Summary:     input.Summary,
+		CreatedAt:   time.Date(2026, 3, 25, 10, 0, 0, 0, time.UTC),
+	}, nil
+}
+
+func (r *stubRepository) RollbackRecommendationChange(
+	_ context.Context,
+	input storage.RecommendationRollbackInput,
+) (storage.RecommendationChange, error) {
+	r.lastRollbackInput = input
+	if r.rollbackChangeErr != nil {
+		return storage.RecommendationChange{}, r.rollbackChangeErr
+	}
+
+	if len(r.changes) > 0 {
+		return r.changes[0], nil
+	}
+
+	return storage.RecommendationChange{
+		ChangeID:       "change-rb-1",
+		ParentChangeID: input.ChangeID,
+		Operation:      storage.ChangeOperationRollback,
+		Status:         storage.ChangeStatusApplied,
+		Reason:         input.Reason,
+		RequestedBy:    input.RequestedBy,
+		CreatedAt:      time.Date(2026, 3, 25, 10, 1, 0, 0, time.UTC),
+	}, nil
+}
+
+func (r *stubRepository) ListRecommendationChanges(
+	_ context.Context,
+	filter storage.RecommendationChangeFilter,
+) ([]storage.RecommendationChange, error) {
+	r.lastChangeFilter = filter
+	if r.listChangesErr != nil {
+		return nil, r.listChangesErr
+	}
+	return r.changes, nil
 }
 
 func (r *stubRepository) Close() {}
@@ -848,5 +917,150 @@ func TestAnomalyEndpointReturnsReport(t *testing.T) {
 	}
 	if repo.lastSeriesFilter.MinerID != "asic-000042" {
 		t.Fatalf("expected normalized miner_id for anomaly endpoint, got %s", repo.lastSeriesFilter.MinerID)
+	}
+}
+
+func TestApplyRecommendationChangeEndpointPersistsChange(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	publisher := &stubPublisher{}
+	repo := &stubRepository{
+		items: []storage.TelemetryReading{
+			{
+				Timestamp:   time.Date(2026, 3, 24, 14, 0, 0, 0, time.UTC),
+				SiteID:      "site-cl-01",
+				RackID:      "rack-cl-01-01",
+				MinerID:     "asic-000042",
+				MinerModel:  "S21",
+				TempCelsius: 95,
+				Tags: map[string]string{
+					"ambient_temp_c": "30",
+				},
+			},
+		},
+		series: []storage.MinerSeriesPoint{
+			{Bucket: time.Date(2026, 3, 24, 12, 0, 0, 0, time.UTC), AvgHashrateTHs: 195, AvgPowerWatts: 3500, AvgTempCelsius: 88, MaxTempCelsius: 93, AvgFanRPM: 6500, AvgEfficiencyJTH: 18.0},
+			{Bucket: time.Date(2026, 3, 24, 13, 0, 0, 0, time.UTC), AvgHashrateTHs: 182, AvgPowerWatts: 3510, AvgTempCelsius: 94, MaxTempCelsius: 98, AvgFanRPM: 7200, AvgEfficiencyJTH: 19.2},
+		},
+		changes: []storage.RecommendationChange{
+			{
+				ChangeID:    "change-apply-1",
+				MinerID:     "asic-000042",
+				SiteID:      "site-cl-01",
+				RackID:      "rack-cl-01-01",
+				Operation:   storage.ChangeOperationApply,
+				Status:      storage.ChangeStatusApplied,
+				Reason:      "operator dry-run",
+				RequestedBy: "ops@test",
+				CreatedAt:   time.Date(2026, 3, 25, 10, 0, 0, 0, time.UTC),
+			},
+		},
+	}
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20, APIKeyAuthConfig{})
+
+	body := `{"reason":"operator dry-run","requested_by":"ops@test"}`
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/v1/anomalies/miners/ASIC_42/changes/apply?resolution=hour&from=2026-03-24T12:00:00Z&to=2026-03-24T14:00:00Z&limit=24",
+		bytes.NewBufferString(body),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusCreated, resp.Code, resp.Body.String())
+	}
+	if repo.lastChangeInput.MinerID != "asic-000042" {
+		t.Fatalf("expected normalized miner_id in change input, got %s", repo.lastChangeInput.MinerID)
+	}
+	if len(repo.lastChangeInput.Recommendations) == 0 {
+		t.Fatalf("expected recommendations to be persisted in change input")
+	}
+	if !strings.Contains(resp.Body.String(), "\"change_id\":\"change-apply-1\"") {
+		t.Fatalf("expected change_id in response, got %s", resp.Body.String())
+	}
+}
+
+func TestRollbackRecommendationChangeEndpoint(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	publisher := &stubPublisher{}
+	repo := &stubRepository{
+		changes: []storage.RecommendationChange{
+			{
+				ChangeID:       "change-rb-1",
+				ParentChangeID: "change-apply-1",
+				Operation:      storage.ChangeOperationRollback,
+				Status:         storage.ChangeStatusApplied,
+				Reason:         "rollback requested by operator",
+				RequestedBy:    "ops@test",
+				CreatedAt:      time.Date(2026, 3, 25, 10, 1, 0, 0, time.UTC),
+			},
+		},
+	}
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20, APIKeyAuthConfig{})
+
+	body := `{"reason":"rollback requested by operator","requested_by":"ops@test"}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/anomalies/changes/change-apply-1/rollback", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusCreated, resp.Code, resp.Body.String())
+	}
+	if repo.lastRollbackInput.ChangeID != "change-apply-1" {
+		t.Fatalf("expected rollback input change id, got %s", repo.lastRollbackInput.ChangeID)
+	}
+	if !strings.Contains(resp.Body.String(), "\"change_id\":\"change-rb-1\"") {
+		t.Fatalf("expected rollback change id in response, got %s", resp.Body.String())
+	}
+}
+
+func TestListRecommendationChangesEndpoint(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	publisher := &stubPublisher{}
+	repo := &stubRepository{
+		changes: []storage.RecommendationChange{
+			{
+				ChangeID:    "change-1",
+				MinerID:     "asic-000042",
+				Operation:   storage.ChangeOperationApply,
+				Status:      storage.ChangeStatusApplied,
+				Reason:      "apply",
+				CreatedAt:   time.Date(2026, 3, 25, 10, 0, 0, 0, time.UTC),
+				SiteID:      "site-cl-01",
+				RackID:      "rack-cl-01-01",
+				RequestedBy: "ops@test",
+			},
+			{
+				ChangeID:    "change-2",
+				MinerID:     "asic-000042",
+				Operation:   storage.ChangeOperationRollback,
+				Status:      storage.ChangeStatusApplied,
+				Reason:      "rollback",
+				CreatedAt:   time.Date(2026, 3, 25, 11, 0, 0, 0, time.UTC),
+				SiteID:      "site-cl-01",
+				RackID:      "rack-cl-01-01",
+				RequestedBy: "ops@test",
+			},
+		},
+	}
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20, APIKeyAuthConfig{})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/anomalies/changes?miner_id=ASIC_42&status=applied&limit=5", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, resp.Code, resp.Body.String())
+	}
+	if repo.lastChangeFilter.MinerID != "asic-000042" {
+		t.Fatalf("expected normalized miner_id in filter, got %s", repo.lastChangeFilter.MinerID)
+	}
+	if repo.lastChangeFilter.Status != storage.ChangeStatusApplied {
+		t.Fatalf("expected applied status filter, got %s", repo.lastChangeFilter.Status)
+	}
+	if !strings.Contains(resp.Body.String(), "\"count\":2") {
+		t.Fatalf("expected count=2 in response, got %s", resp.Body.String())
 	}
 }

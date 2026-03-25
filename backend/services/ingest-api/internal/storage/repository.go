@@ -139,6 +139,63 @@ type SiteEfficiency struct {
 	LastSeenAt        time.Time `json:"last_seen_at"`
 }
 
+type ChangeOperation string
+
+const (
+	ChangeOperationApply    ChangeOperation = "apply"
+	ChangeOperationRollback ChangeOperation = "rollback"
+)
+
+type ChangeStatus string
+
+const (
+	ChangeStatusApplied    ChangeStatus = "applied"
+	ChangeStatusRolledBack ChangeStatus = "rolled_back"
+)
+
+type RecommendationChangeCreateInput struct {
+	SiteID          string
+	RackID          string
+	MinerID         string
+	Reason          string
+	RequestedBy     string
+	Summary         string
+	SourceReport    map[string]any
+	Recommendations []map[string]any
+	ImpactEstimate  map[string]any
+}
+
+type RecommendationRollbackInput struct {
+	ChangeID    string
+	Reason      string
+	RequestedBy string
+}
+
+type RecommendationChangeFilter struct {
+	MinerID string
+	Status  ChangeStatus
+	Limit   int
+}
+
+type RecommendationChange struct {
+	ChangeID             string           `json:"change_id"`
+	ParentChangeID       string           `json:"parent_change_id,omitempty"`
+	SupersededByChangeID string           `json:"superseded_by_change_id,omitempty"`
+	SiteID               string           `json:"site_id"`
+	RackID               string           `json:"rack_id"`
+	MinerID              string           `json:"miner_id"`
+	Operation            ChangeOperation  `json:"operation"`
+	Status               ChangeStatus     `json:"status"`
+	Reason               string           `json:"reason"`
+	RequestedBy          string           `json:"requested_by"`
+	Summary              string           `json:"summary"`
+	SourceReport         map[string]any   `json:"source_report,omitempty"`
+	Recommendations      []map[string]any `json:"recommendations,omitempty"`
+	ImpactEstimate       map[string]any   `json:"impact_estimate,omitempty"`
+	CreatedAt            time.Time        `json:"created_at"`
+	RolledBackAt         *time.Time       `json:"rolled_back_at,omitempty"`
+}
+
 type Repository interface {
 	PersistTelemetry(ctx context.Context, request telemetry.IngestRequest, rawPayload []byte) error
 	ListReadings(ctx context.Context, filter ReadingsFilter) ([]TelemetryReading, error)
@@ -147,5 +204,8 @@ type Repository interface {
 	ListMinerEfficiency(ctx context.Context, filter EfficiencyFilter) ([]MinerEfficiency, error)
 	ListRackEfficiency(ctx context.Context, filter EfficiencyFilter) ([]RackEfficiency, error)
 	ListSiteEfficiency(ctx context.Context, filter EfficiencyFilter) ([]SiteEfficiency, error)
+	CreateRecommendationChange(ctx context.Context, input RecommendationChangeCreateInput) (RecommendationChange, error)
+	RollbackRecommendationChange(ctx context.Context, input RecommendationRollbackInput) (RecommendationChange, error)
+	ListRecommendationChanges(ctx context.Context, filter RecommendationChangeFilter) ([]RecommendationChange, error)
 	Close()
 }

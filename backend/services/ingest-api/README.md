@@ -55,6 +55,9 @@ Variables:
 - `GET /v1/efficiency/racks`
 - `GET /v1/efficiency/sites`
 - `GET /v1/anomalies/miners/:miner_id/analyze`
+- `POST /v1/anomalies/miners/:miner_id/changes/apply`
+- `POST /v1/anomalies/changes/:change_id/rollback`
+- `GET /v1/anomalies/changes`
 - `GET /dashboard/` (dashboard v0 embebido)
 
 Ejemplos:
@@ -68,6 +71,13 @@ curl "http://localhost:8080/v1/efficiency/miners?window_minutes=120&limit=20"
 curl "http://localhost:8080/v1/efficiency/racks?site_id=site-cl-01&window_minutes=120"
 curl "http://localhost:8080/v1/efficiency/sites?window_minutes=120"
 curl "http://localhost:8080/v1/anomalies/miners/asic-000001/analyze?resolution=minute&from=2026-03-24T00:00:00Z&to=2026-03-24T12:00:00Z"
+curl -X POST "http://localhost:8080/v1/anomalies/miners/asic-000001/changes/apply?resolution=minute&limit=120" \
+  -H "Content-Type: application/json" \
+  -d '{"reason":"operator dry-run","requested_by":"ops@fractsoul.local"}'
+curl "http://localhost:8080/v1/anomalies/changes?miner_id=asic-000001&status=applied&limit=20"
+curl -X POST "http://localhost:8080/v1/anomalies/changes/<change_id>/rollback" \
+  -H "Content-Type: application/json" \
+  -d '{"reason":"rollback post-check","requested_by":"ops@fractsoul.local"}'
 # Si API auth esta habilitada:
 curl -H "X-API-Key: local-dev-key" "http://localhost:8080/v1/telemetry/readings?limit=5"
 ```

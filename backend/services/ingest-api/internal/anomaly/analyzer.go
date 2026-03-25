@@ -3,6 +3,7 @@ package anomaly
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,23 +39,58 @@ type Detection struct {
 type Recommendation struct {
 	Parameter      string `json:"parameter"`
 	SuggestedDelta string `json:"suggested_delta"`
+	RequestedDelta string `json:"requested_delta,omitempty"`
 	Reason         string `json:"reason"`
 }
 
+type GuardrailDecision struct {
+	Parameter      string `json:"parameter"`
+	RequestedDelta string `json:"requested_delta"`
+	AppliedDelta   string `json:"applied_delta"`
+	Action         string `json:"action"`
+	Reason         string `json:"reason"`
+}
+
+type ImpactSnapshot struct {
+	HashrateTHs    float64 `json:"hashrate_ths"`
+	PowerWatts     float64 `json:"power_watts"`
+	TempCelsius    float64 `json:"temp_celsius"`
+	FanRPM         float64 `json:"fan_rpm"`
+	CompensatedJTH float64 `json:"compensated_jth"`
+}
+
+type ImpactDelta struct {
+	HashrateTHsPct    float64 `json:"hashrate_ths_pct"`
+	PowerWattsPct     float64 `json:"power_watts_pct"`
+	TempCelsiusDelta  float64 `json:"temp_celsius_delta"`
+	FanRPMPct         float64 `json:"fan_rpm_pct"`
+	CompensatedJTHPct float64 `json:"compensated_jth_pct"`
+}
+
+type ImpactEstimate struct {
+	Before      ImpactSnapshot `json:"before"`
+	After       ImpactSnapshot `json:"after"`
+	Delta       ImpactDelta    `json:"delta"`
+	Confidence  float64        `json:"confidence"`
+	Assumptions []string       `json:"assumptions"`
+}
+
 type Report struct {
-	MinerID         string           `json:"miner_id"`
-	SiteID          string           `json:"site_id"`
-	RackID          string           `json:"rack_id"`
-	MinerModel      string           `json:"miner_model"`
-	WindowFrom      time.Time        `json:"window_from"`
-	WindowTo        time.Time        `json:"window_to"`
-	Features        FeatureVector    `json:"features"`
-	Hotspot         Detection        `json:"hotspot"`
-	HashDegradation Detection        `json:"hash_degradation"`
-	SeverityScore   float64          `json:"severity_score"`
-	SeverityLabel   string           `json:"severity_label"`
-	ProbableCause   string           `json:"probable_cause"`
-	Recommendations []Recommendation `json:"recommendations"`
+	MinerID         string              `json:"miner_id"`
+	SiteID          string              `json:"site_id"`
+	RackID          string              `json:"rack_id"`
+	MinerModel      string              `json:"miner_model"`
+	WindowFrom      time.Time           `json:"window_from"`
+	WindowTo        time.Time           `json:"window_to"`
+	Features        FeatureVector       `json:"features"`
+	Hotspot         Detection           `json:"hotspot"`
+	HashDegradation Detection           `json:"hash_degradation"`
+	SeverityScore   float64             `json:"severity_score"`
+	SeverityLabel   string              `json:"severity_label"`
+	ProbableCause   string              `json:"probable_cause"`
+	Recommendations []Recommendation    `json:"recommendations"`
+	Guardrails      []GuardrailDecision `json:"guardrails"`
+	ImpactEstimate  ImpactEstimate      `json:"impact_estimate"`
 }
 
 func Analyze(
@@ -76,7 +112,8 @@ func Analyze(
 	severityScore := severityFromDetections(features, hotspot, hashDrop)
 	severityLabel := labelFromScore(severityScore)
 	probableCause := probableCauseFromDetections(features, hotspot, hashDrop)
-	recommendations := recommendActions(features, hotspot, hashDrop)
+	recommendations, guardrails := applyGuardrails(features, baseline, hotspot, recommendActions(features, hotspot, hashDrop))
+	impactEstimate := estimateImpact(features, baseline, recommendations)
 
 	return Report{
 		MinerID:         latest.MinerID,
@@ -92,6 +129,8 @@ func Analyze(
 		SeverityLabel:   severityLabel,
 		ProbableCause:   probableCause,
 		Recommendations: recommendations,
+		Guardrails:      guardrails,
+		ImpactEstimate:  impactEstimate,
 	}
 }
 
@@ -311,6 +350,251 @@ func recommendActions(features FeatureVector, hotspot, hashDrop Detection) []Rec
 			},
 		}
 	}
+}
+
+func applyGuardrails(
+	features FeatureVector,
+	baseline efficiency.Baseline,
+	hotspot Detection,
+	recommendations []Recommendation,
+) ([]Recommendation, []GuardrailDecision) {
+	safeRecommendations := make([]Recommendation, 0, len(recommendations))
+	decisions := make([]GuardrailDecision, 0, len(recommendations))
+
+	for _, rec := range recommendations {
+		requestedRaw := strings.TrimSpace(rec.SuggestedDelta)
+		param := strings.ToLower(strings.TrimSpace(rec.Parameter))
+
+		parsed, err := parseDelta(requestedRaw)
+		if err != nil {
+			applied := zeroDeltaForParameter(param)
+			rec.RequestedDelta = requestedRaw
+			rec.SuggestedDelta = applied
+			rec.Reason = rec.Reason + " Guardrail: ajuste no parseable, se neutraliza."
+
+			safeRecommendations = append(safeRecommendations, rec)
+			decisions = append(decisions, GuardrailDecision{
+				Parameter:      rec.Parameter,
+				RequestedDelta: requestedRaw,
+				AppliedDelta:   applied,
+				Action:         "blocked",
+				Reason:         "delta no interpretable por el motor de guardrails",
+			})
+			continue
+		}
+
+		applied := parsed.Value
+		action := "allow"
+		reason := "ajuste dentro de limites operativos."
+
+		switch param {
+		case "fan":
+			if parsed.Unit != "%" {
+				applied = 0
+				action = "blocked"
+				reason = "fan debe expresarse como porcentaje (%)."
+				break
+			}
+			clamped := efficiency.Clamp(applied, -15, 20)
+			if clamped != applied {
+				applied = clamped
+				action = "clamped"
+				reason = "fan limitado al rango seguro [-15%, +20%]."
+			}
+			if hotspot.Triggered && applied < 0 {
+				applied = 0
+				action = "blocked"
+				reason = "hotspot activo: no se permite reducir ventilacion."
+			}
+		case "freq":
+			if parsed.Unit != "%" {
+				applied = 0
+				action = "blocked"
+				reason = "freq debe expresarse como porcentaje (%)."
+				break
+			}
+			clamped := efficiency.Clamp(applied, -8, 4)
+			if clamped != applied {
+				applied = clamped
+				action = "clamped"
+				reason = "freq limitada al rango seguro [-8%, +4%]."
+			}
+			if (hotspot.Triggered || features.ThermalBand == "warning" || features.ThermalBand == "hotspot") && applied > 0 {
+				applied = 0
+				action = "blocked"
+				reason = "banda termica no segura para subir frecuencia."
+			}
+		case "volt":
+			if parsed.Unit != "mV" {
+				applied = 0
+				action = "blocked"
+				reason = "volt debe expresarse como milivoltios (mV)."
+				break
+			}
+			clamped := efficiency.Clamp(applied, -20, 12)
+			if clamped != applied {
+				applied = clamped
+				action = "clamped"
+				reason = "volt limitado al rango seguro [-20mV, +12mV]."
+			}
+			if (hotspot.Triggered || features.ThermalBand == "warning" || features.ThermalBand == "hotspot") && applied > 0 {
+				applied = 0
+				action = "blocked"
+				reason = "riesgo termico elevado: se bloquea aumento de voltaje."
+			}
+			if features.CompensatedJTH > baseline.NominalJTH*1.15 && applied > 0 {
+				applied = 0
+				action = "blocked"
+				reason = "eficiencia degradada: no se permite subir voltaje."
+			}
+		default:
+			applied = 0
+			action = "blocked"
+			reason = "parametro no soportado por guardrails."
+		}
+
+		appliedDelta := formatDelta(applied, parsed.Unit)
+		rec.RequestedDelta = requestedRaw
+		rec.SuggestedDelta = appliedDelta
+		if action == "allow" && requestedRaw == appliedDelta {
+			rec.RequestedDelta = ""
+		}
+
+		safeRecommendations = append(safeRecommendations, rec)
+		decisions = append(decisions, GuardrailDecision{
+			Parameter:      rec.Parameter,
+			RequestedDelta: requestedRaw,
+			AppliedDelta:   appliedDelta,
+			Action:         action,
+			Reason:         reason,
+		})
+	}
+
+	return safeRecommendations, decisions
+}
+
+func estimateImpact(
+	features FeatureVector,
+	baseline efficiency.Baseline,
+	recommendations []Recommendation,
+) ImpactEstimate {
+	before := ImpactSnapshot{
+		HashrateTHs:    features.AvgHashrateTHs,
+		PowerWatts:     features.AvgPowerWatts,
+		TempCelsius:    features.AvgTempCelsius,
+		FanRPM:         features.AvgFanRPM,
+		CompensatedJTH: features.CompensatedJTH,
+	}
+
+	after := before
+	for _, rec := range recommendations {
+		d, err := parseDelta(rec.SuggestedDelta)
+		if err != nil {
+			continue
+		}
+
+		switch strings.ToLower(strings.TrimSpace(rec.Parameter)) {
+		case "fan":
+			after.FanRPM *= 1 + (d.Value / 100)
+			after.TempCelsius += -0.14 * d.Value
+			after.PowerWatts *= 1 + (0.02 * d.Value / 100)
+		case "freq":
+			after.HashrateTHs *= 1 + (0.82 * d.Value / 100)
+			after.PowerWatts *= 1 + (0.68 * d.Value / 100)
+			after.TempCelsius += 0.09 * d.Value
+		case "volt":
+			ratio := d.Value / 700.0
+			after.PowerWatts *= 1 + (0.70 * ratio)
+			after.HashrateTHs *= 1 + (0.18 * ratio)
+			after.TempCelsius += 10 * ratio
+		}
+	}
+
+	after.HashrateTHs = math.Max(after.HashrateTHs, 1)
+	after.PowerWatts = math.Max(after.PowerWatts, 1)
+	after.TempCelsius = math.Max(after.TempCelsius, -20)
+	after.FanRPM = math.Max(after.FanRPM, 0)
+	after.CompensatedJTH = efficiency.CompensateJTH(
+		efficiency.ComputeJTH(after.PowerWatts, after.HashrateTHs),
+		features.AmbientCelsius,
+		baseline,
+	)
+
+	confidence := efficiency.Clamp(0.45+float64(features.Samples)*0.03, 0.45, 0.92)
+	if features.ThermalBand == "hotspot" {
+		confidence = efficiency.Clamp(confidence-0.08, 0.40, 0.92)
+	}
+
+	return ImpactEstimate{
+		Before: before,
+		After:  after,
+		Delta: ImpactDelta{
+			HashrateTHsPct:    efficiency.DeltaPct(after.HashrateTHs, before.HashrateTHs),
+			PowerWattsPct:     efficiency.DeltaPct(after.PowerWatts, before.PowerWatts),
+			TempCelsiusDelta:  after.TempCelsius - before.TempCelsius,
+			FanRPMPct:         efficiency.DeltaPct(after.FanRPM, before.FanRPM),
+			CompensatedJTHPct: efficiency.DeltaPct(after.CompensatedJTH, before.CompensatedJTH),
+		},
+		Confidence: math.Round(confidence*100) / 100,
+		Assumptions: []string{
+			"Estimacion heuristica basada en elasticidades historicas.",
+			"No incorpora cambios de firmware ni mantenimiento fisico.",
+			"Requiere validacion post-cambio en ventana de 30-60 minutos.",
+		},
+	}
+}
+
+type parsedDelta struct {
+	Value float64
+	Unit  string
+}
+
+func parseDelta(raw string) (parsedDelta, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return parsedDelta{}, fmt.Errorf("empty delta")
+	}
+
+	lower := strings.ToLower(value)
+	switch {
+	case strings.HasSuffix(lower, "%"):
+		number := strings.TrimSpace(value[:len(value)-1])
+		parsed, err := strconv.ParseFloat(number, 64)
+		if err != nil {
+			return parsedDelta{}, fmt.Errorf("invalid percent delta")
+		}
+		return parsedDelta{Value: parsed, Unit: "%"}, nil
+	case strings.HasSuffix(lower, "mv"):
+		number := strings.TrimSpace(value[:len(value)-2])
+		parsed, err := strconv.ParseFloat(number, 64)
+		if err != nil {
+			return parsedDelta{}, fmt.Errorf("invalid mv delta")
+		}
+		return parsedDelta{Value: parsed, Unit: "mV"}, nil
+	default:
+		return parsedDelta{}, fmt.Errorf("unsupported delta unit")
+	}
+}
+
+func zeroDeltaForParameter(parameter string) string {
+	switch parameter {
+	case "volt":
+		return "0mV"
+	default:
+		return "0%"
+	}
+}
+
+func formatDelta(value float64, unit string) string {
+	if math.Abs(value) < 1e-9 {
+		return "0" + unit
+	}
+
+	formatted := fmt.Sprintf("%+.2f", value)
+	formatted = strings.TrimSuffix(formatted, "00")
+	formatted = strings.TrimSuffix(formatted, "0")
+	formatted = strings.TrimSuffix(formatted, ".")
+	return formatted + unit
 }
 
 func firstBucket(points []storage.MinerSeriesPoint) time.Time {

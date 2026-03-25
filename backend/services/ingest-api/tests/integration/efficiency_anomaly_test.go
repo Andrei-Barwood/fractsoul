@@ -120,4 +120,11 @@ func TestEfficiencyAndAnomalyEndpoints(t *testing.T) {
 	if severity, ok := reportAny["severity_score"].(float64); !ok || severity <= 0 {
 		t.Fatalf("expected anomaly severity_score > 0, got %#v", reportAny["severity_score"])
 	}
+	if _, ok := reportAny["impact_estimate"].(map[string]any); !ok {
+		t.Fatalf("expected impact_estimate object, got %#v", reportAny["impact_estimate"])
+	}
+	guardrails, ok := reportAny["guardrails"].([]any)
+	if !ok || len(guardrails) == 0 {
+		t.Fatalf("expected guardrails array with items, got %#v", reportAny["guardrails"])
+	}
 }

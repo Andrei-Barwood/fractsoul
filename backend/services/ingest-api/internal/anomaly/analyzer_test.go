@@ -32,15 +32,24 @@ func TestAnalyzeDetectsHotspot(t *testing.T) {
 	if report.SeverityScore < 60 {
 		t.Fatalf("expected severity >= 60, got %.2f", report.SeverityScore)
 	}
+	if len(report.Guardrails) != 3 {
+		t.Fatalf("expected 3 guardrail decisions, got %d", len(report.Guardrails))
+	}
+	if report.ImpactEstimate.Confidence <= 0 {
+		t.Fatalf("expected confidence > 0, got %.2f", report.ImpactEstimate.Confidence)
+	}
+	if report.ImpactEstimate.Before.CompensatedJTH <= 0 {
+		t.Fatalf("expected baseline compensated jth > 0, got %.2f", report.ImpactEstimate.Before.CompensatedJTH)
+	}
 }
 
 func TestAnalyzeDetectsProgressiveHashDegradation(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Minute)
 	series := []storage.MinerSeriesPoint{
 		{Bucket: now.Add(-60 * time.Minute), AvgHashrateTHs: 198, AvgPowerWatts: 3500, AvgTempCelsius: 74, MaxTempCelsius: 78, AvgFanRPM: 5900, AvgEfficiencyJTH: 17.7},
-		{Bucket: now.Add(-40 * time.Minute), AvgHashrateTHs: 188, AvgPowerWatts: 3490, AvgTempCelsius: 75, MaxTempCelsius: 79, AvgFanRPM: 6000, AvgEfficiencyJTH: 18.5},
-		{Bucket: now.Add(-20 * time.Minute), AvgHashrateTHs: 168, AvgPowerWatts: 3470, AvgTempCelsius: 76, MaxTempCelsius: 80, AvgFanRPM: 6100, AvgEfficiencyJTH: 20.6},
-		{Bucket: now, AvgHashrateTHs: 152, AvgPowerWatts: 3460, AvgTempCelsius: 77, MaxTempCelsius: 81, AvgFanRPM: 6200, AvgEfficiencyJTH: 22.7},
+		{Bucket: now.Add(-40 * time.Minute), AvgHashrateTHs: 182, AvgPowerWatts: 3490, AvgTempCelsius: 75, MaxTempCelsius: 79, AvgFanRPM: 6000, AvgEfficiencyJTH: 19.1},
+		{Bucket: now.Add(-20 * time.Minute), AvgHashrateTHs: 150, AvgPowerWatts: 3470, AvgTempCelsius: 76, MaxTempCelsius: 80, AvgFanRPM: 6100, AvgEfficiencyJTH: 23.1},
+		{Bucket: now, AvgHashrateTHs: 124, AvgPowerWatts: 3460, AvgTempCelsius: 77, MaxTempCelsius: 81, AvgFanRPM: 6200, AvgEfficiencyJTH: 27.9},
 	}
 
 	report := Analyze(storage.TelemetryReading{
@@ -62,5 +71,27 @@ func TestAnalyzeDetectsProgressiveHashDegradation(t *testing.T) {
 	}
 	if len(report.Recommendations) != 3 {
 		t.Fatalf("expected 3 recommendations, got %d", len(report.Recommendations))
+	}
+	if len(report.Guardrails) != 3 {
+		t.Fatalf("expected 3 guardrail decisions, got %d", len(report.Guardrails))
+	}
+
+	var voltRec Recommendation
+	foundVolt := false
+	for _, recommendation := range report.Recommendations {
+		if recommendation.Parameter == "volt" {
+			foundVolt = true
+			voltRec = recommendation
+			break
+		}
+	}
+	if !foundVolt {
+		t.Fatalf("expected volt recommendation in report")
+	}
+	if voltRec.SuggestedDelta != "0mV" {
+		t.Fatalf("expected guardrail to neutralize volt recommendation, got %s", voltRec.SuggestedDelta)
+	}
+	if voltRec.RequestedDelta == "" {
+		t.Fatalf("expected requested_delta to be preserved when guardrail modifies recommendation")
 	}
 }

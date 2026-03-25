@@ -7,7 +7,7 @@ Monorepo base para el MVP de operacion de granjas de Bitcoin mining.
 - `backend/services/ingest-api`: servicio de ingesta + lectura de telemetria (Go + Gin + NATS + Postgres).
 - `frontend/apps/dashboard`: placeholder de UI operativa.
 - `infra/docker`: recursos de contenedores para desarrollo local.
-- `docs/planning`: documentos de ejecucion D1-D58 y ADRs.
+- `docs/planning`: documentos de ejecucion D1-D78 y ADRs.
 - `docs/contracts`: contratos JSON/schema.
 - `docs/engineering`: convenciones tecnicas.
 

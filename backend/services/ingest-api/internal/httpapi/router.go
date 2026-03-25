@@ -52,6 +52,9 @@ func NewRouter(
 		v1.GET("/efficiency/racks", efficiencyHandler.RackEfficiency)
 		v1.GET("/efficiency/sites", efficiencyHandler.SiteEfficiency)
 		v1.GET("/anomalies/miners/:miner_id/analyze", anomalyHandler.AnalyzeMiner)
+		v1.POST("/anomalies/miners/:miner_id/changes/apply", anomalyHandler.ApplyRecommendationChange)
+		v1.POST("/anomalies/changes/:change_id/rollback", anomalyHandler.RollbackRecommendationChange)
+		v1.GET("/anomalies/changes", anomalyHandler.ListRecommendationChanges)
 	}
 
 	return router

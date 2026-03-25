@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +26,8 @@ const (
 	maxSeriesLimit     = 10000
 	defaultEffLimit    = 100
 	maxEffLimit        = 1000
+	defaultChangeLimit = 50
+	maxChangeLimit     = 500
 )
 
 type PostgresRepository struct {
@@ -1166,6 +1169,459 @@ GROUP BY tr.site_id
 	return items, nil
 }
 
+func (r *PostgresRepository) CreateRecommendationChange(
+	ctx context.Context,
+	input RecommendationChangeCreateInput,
+) (RecommendationChange, error) {
+	minerID := strings.TrimSpace(input.MinerID)
+	if minerID == "" {
+		return RecommendationChange{}, fmt.Errorf("miner_id is required")
+	}
+
+	reason := strings.TrimSpace(input.Reason)
+	if reason == "" {
+		reason = "apply guarded recommendation"
+	}
+
+	requestedBy := strings.TrimSpace(input.RequestedBy)
+	if requestedBy == "" {
+		requestedBy = "system"
+	}
+
+	summary := strings.TrimSpace(input.Summary)
+	if summary == "" {
+		summary = "recommendation apply"
+	}
+
+	siteID := strings.TrimSpace(input.SiteID)
+	rackID := strings.TrimSpace(input.RackID)
+	if siteID == "" || rackID == "" {
+		err := r.pool.QueryRow(ctx, `
+SELECT site_id, rack_id
+FROM miners
+WHERE miner_id = $1
+`, minerID).Scan(&siteID, &rackID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return RecommendationChange{}, fmt.Errorf("miner %s not found", minerID)
+			}
+			return RecommendationChange{}, fmt.Errorf("resolve site/rack for miner: %w", err)
+		}
+	}
+
+	sourceReport := input.SourceReport
+	if sourceReport == nil {
+		sourceReport = map[string]any{}
+	}
+	sourceReportJSON, err := json.Marshal(sourceReport)
+	if err != nil {
+		return RecommendationChange{}, fmt.Errorf("marshal source_report: %w", err)
+	}
+
+	recommendations := input.Recommendations
+	if recommendations == nil {
+		recommendations = []map[string]any{}
+	}
+	recommendationsJSON, err := json.Marshal(recommendations)
+	if err != nil {
+		return RecommendationChange{}, fmt.Errorf("marshal recommendations: %w", err)
+	}
+
+	impactEstimate := input.ImpactEstimate
+	if impactEstimate == nil {
+		impactEstimate = map[string]any{}
+	}
+	impactJSON, err := json.Marshal(impactEstimate)
+	if err != nil {
+		return RecommendationChange{}, fmt.Errorf("marshal impact_estimate: %w", err)
+	}
+
+	changeID := uuid.NewString()
+	var createdAt time.Time
+	err = r.pool.QueryRow(ctx, `
+INSERT INTO recommendation_changes (
+  change_id,
+  parent_change_id,
+  site_id,
+  rack_id,
+  miner_id,
+  operation,
+  status,
+  reason,
+  requested_by,
+  summary,
+  source_report,
+  recommendations,
+  impact_estimate
+)
+VALUES (
+  $1,
+  NULL,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6,
+  $7,
+  $8,
+  $9,
+  $10,
+  $11,
+  $12
+)
+RETURNING created_at
+`,
+		changeID,
+		siteID,
+		rackID,
+		minerID,
+		string(ChangeOperationApply),
+		string(ChangeStatusApplied),
+		reason,
+		requestedBy,
+		summary,
+		sourceReportJSON,
+		recommendationsJSON,
+		impactJSON,
+	).Scan(&createdAt)
+	if err != nil {
+		return RecommendationChange{}, fmt.Errorf("insert recommendation change: %w", err)
+	}
+
+	return RecommendationChange{
+		ChangeID:        changeID,
+		SiteID:          siteID,
+		RackID:          rackID,
+		MinerID:         minerID,
+		Operation:       ChangeOperationApply,
+		Status:          ChangeStatusApplied,
+		Reason:          reason,
+		RequestedBy:     requestedBy,
+		Summary:         summary,
+		SourceReport:    sourceReport,
+		Recommendations: recommendations,
+		ImpactEstimate:  impactEstimate,
+		CreatedAt:       createdAt,
+	}, nil
+}
+
+func (r *PostgresRepository) RollbackRecommendationChange(
+	ctx context.Context,
+	input RecommendationRollbackInput,
+) (RecommendationChange, error) {
+	changeID := strings.TrimSpace(input.ChangeID)
+	if changeID == "" {
+		return RecommendationChange{}, fmt.Errorf("change_id is required")
+	}
+
+	reason := strings.TrimSpace(input.Reason)
+	if reason == "" {
+		reason = "operator requested logical rollback"
+	}
+
+	requestedBy := strings.TrimSpace(input.RequestedBy)
+	if requestedBy == "" {
+		requestedBy = "system"
+	}
+
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return RecommendationChange{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	var target RecommendationChange
+	var sourceReportRaw []byte
+	var recommendationsRaw []byte
+	var impactRaw []byte
+	err = tx.QueryRow(ctx, `
+SELECT
+  change_id,
+  site_id,
+  rack_id,
+  miner_id,
+  operation,
+  status,
+  reason,
+  requested_by,
+  summary,
+  source_report,
+  recommendations,
+  impact_estimate,
+  created_at
+FROM recommendation_changes
+WHERE change_id = $1
+  AND operation = 'apply'
+FOR UPDATE
+`, changeID).Scan(
+		&target.ChangeID,
+		&target.SiteID,
+		&target.RackID,
+		&target.MinerID,
+		&target.Operation,
+		&target.Status,
+		&target.Reason,
+		&target.RequestedBy,
+		&target.Summary,
+		&sourceReportRaw,
+		&recommendationsRaw,
+		&impactRaw,
+		&target.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return RecommendationChange{}, fmt.Errorf("apply change %s not found", changeID)
+		}
+		return RecommendationChange{}, fmt.Errorf("query target change: %w", err)
+	}
+
+	if target.Status == ChangeStatusRolledBack {
+		return RecommendationChange{}, fmt.Errorf("change %s is already rolled back", changeID)
+	}
+
+	targetRecommendations, err := decodeJSONSliceMap(recommendationsRaw)
+	if err != nil {
+		return RecommendationChange{}, fmt.Errorf("decode target recommendations: %w", err)
+	}
+	rollbackRecommendations := invertRecommendations(targetRecommendations)
+
+	targetImpact, err := decodeJSONMap(impactRaw)
+	if err != nil {
+		return RecommendationChange{}, fmt.Errorf("decode target impact estimate: %w", err)
+	}
+	rollbackImpact := invertImpactEstimate(targetImpact)
+
+	targetReport, err := decodeJSONMap(sourceReportRaw)
+	if err != nil {
+		return RecommendationChange{}, fmt.Errorf("decode target source report: %w", err)
+	}
+
+	rollbackSourceReport := deepCopyMap(targetReport)
+	rollbackSourceReport["rollback_of_change_id"] = target.ChangeID
+
+	rollbackSummary := fmt.Sprintf("logical rollback of change %s", target.ChangeID)
+	rollbackID := uuid.NewString()
+	var rollbackCreatedAt time.Time
+
+	rollbackSourceReportJSON, err := json.Marshal(rollbackSourceReport)
+	if err != nil {
+		return RecommendationChange{}, fmt.Errorf("marshal rollback source report: %w", err)
+	}
+	rollbackRecommendationsJSON, err := json.Marshal(rollbackRecommendations)
+	if err != nil {
+		return RecommendationChange{}, fmt.Errorf("marshal rollback recommendations: %w", err)
+	}
+	rollbackImpactJSON, err := json.Marshal(rollbackImpact)
+	if err != nil {
+		return RecommendationChange{}, fmt.Errorf("marshal rollback impact estimate: %w", err)
+	}
+
+	err = tx.QueryRow(ctx, `
+INSERT INTO recommendation_changes (
+  change_id,
+  parent_change_id,
+  site_id,
+  rack_id,
+  miner_id,
+  operation,
+  status,
+  reason,
+  requested_by,
+  summary,
+  source_report,
+  recommendations,
+  impact_estimate
+)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6,
+  $7,
+  $8,
+  $9,
+  $10,
+  $11,
+  $12,
+  $13
+)
+RETURNING created_at
+`,
+		rollbackID,
+		target.ChangeID,
+		target.SiteID,
+		target.RackID,
+		target.MinerID,
+		string(ChangeOperationRollback),
+		string(ChangeStatusApplied),
+		reason,
+		requestedBy,
+		rollbackSummary,
+		rollbackSourceReportJSON,
+		rollbackRecommendationsJSON,
+		rollbackImpactJSON,
+	).Scan(&rollbackCreatedAt)
+	if err != nil {
+		return RecommendationChange{}, fmt.Errorf("insert rollback change: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+UPDATE recommendation_changes
+SET
+  status = $2,
+  rolled_back_at = NOW(),
+  superseded_by_change_id = $3
+WHERE change_id = $1
+`, target.ChangeID, string(ChangeStatusRolledBack), rollbackID)
+	if err != nil {
+		return RecommendationChange{}, fmt.Errorf("update source change status: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return RecommendationChange{}, fmt.Errorf("commit rollback tx: %w", err)
+	}
+
+	return RecommendationChange{
+		ChangeID:        rollbackID,
+		ParentChangeID:  target.ChangeID,
+		SiteID:          target.SiteID,
+		RackID:          target.RackID,
+		MinerID:         target.MinerID,
+		Operation:       ChangeOperationRollback,
+		Status:          ChangeStatusApplied,
+		Reason:          reason,
+		RequestedBy:     requestedBy,
+		Summary:         rollbackSummary,
+		SourceReport:    rollbackSourceReport,
+		Recommendations: rollbackRecommendations,
+		ImpactEstimate:  rollbackImpact,
+		CreatedAt:       rollbackCreatedAt,
+	}, nil
+}
+
+func (r *PostgresRepository) ListRecommendationChanges(
+	ctx context.Context,
+	filter RecommendationChangeFilter,
+) ([]RecommendationChange, error) {
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = defaultChangeLimit
+	}
+	if limit > maxChangeLimit {
+		limit = maxChangeLimit
+	}
+
+	query := `
+SELECT
+  change_id,
+  parent_change_id,
+  superseded_by_change_id,
+  site_id,
+  rack_id,
+  miner_id,
+  operation,
+  status,
+  reason,
+  requested_by,
+  summary,
+  source_report,
+  recommendations,
+  impact_estimate,
+  created_at,
+  rolled_back_at
+FROM recommendation_changes
+`
+	clauses := make([]string, 0, 2)
+	args := make([]any, 0, 3)
+	argPos := 1
+
+	if filter.MinerID != "" {
+		clauses = append(clauses, fmt.Sprintf("miner_id = $%d", argPos))
+		args = append(args, filter.MinerID)
+		argPos++
+	}
+	if filter.Status != "" {
+		clauses = append(clauses, fmt.Sprintf("status = $%d", argPos))
+		args = append(args, string(filter.Status))
+		argPos++
+	}
+
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ")
+	}
+
+	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d", argPos)
+	args = append(args, limit)
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query recommendation changes: %w", err)
+	}
+	defer rows.Close()
+
+	changes := make([]RecommendationChange, 0, limit)
+	for rows.Next() {
+		var item RecommendationChange
+		var parentChangeID *string
+		var supersededByChangeID *string
+		var rolledBackAt *time.Time
+		var sourceReportRaw []byte
+		var recommendationsRaw []byte
+		var impactRaw []byte
+		if err := rows.Scan(
+			&item.ChangeID,
+			&parentChangeID,
+			&supersededByChangeID,
+			&item.SiteID,
+			&item.RackID,
+			&item.MinerID,
+			&item.Operation,
+			&item.Status,
+			&item.Reason,
+			&item.RequestedBy,
+			&item.Summary,
+			&sourceReportRaw,
+			&recommendationsRaw,
+			&impactRaw,
+			&item.CreatedAt,
+			&rolledBackAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan recommendation change: %w", err)
+		}
+		if parentChangeID != nil {
+			item.ParentChangeID = *parentChangeID
+		}
+		if supersededByChangeID != nil {
+			item.SupersededByChangeID = *supersededByChangeID
+		}
+		item.RolledBackAt = rolledBackAt
+
+		item.SourceReport, err = decodeJSONMap(sourceReportRaw)
+		if err != nil {
+			return nil, fmt.Errorf("decode source_report json: %w", err)
+		}
+		item.Recommendations, err = decodeJSONSliceMap(recommendationsRaw)
+		if err != nil {
+			return nil, fmt.Errorf("decode recommendations json: %w", err)
+		}
+		item.ImpactEstimate, err = decodeJSONMap(impactRaw)
+		if err != nil {
+			return nil, fmt.Errorf("decode impact_estimate json: %w", err)
+		}
+
+		changes = append(changes, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate recommendation changes rows: %w", err)
+	}
+
+	return changes, nil
+}
+
 func (r *PostgresRepository) listMinerSeriesFromRaw(
 	ctx context.Context,
 	filter MinerSeriesFilter,
@@ -1255,6 +1711,159 @@ func isUndefinedRelation(err error) bool {
 		return pgErr.Code == "42P01"
 	}
 	return false
+}
+
+func decodeJSONMap(raw []byte) (map[string]any, error) {
+	out := map[string]any{}
+	if len(raw) == 0 {
+		return out, nil
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func decodeJSONSliceMap(raw []byte) ([]map[string]any, error) {
+	out := []map[string]any{}
+	if len(raw) == 0 {
+		return out, nil
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func invertRecommendations(recommendations []map[string]any) []map[string]any {
+	out := make([]map[string]any, 0, len(recommendations))
+	for _, item := range recommendations {
+		clone := deepCopyMap(item)
+
+		rawDelta, _ := clone["suggested_delta"].(string)
+		if inverted, ok := invertDelta(rawDelta); ok {
+			clone["requested_delta"] = strings.TrimSpace(rawDelta)
+			clone["suggested_delta"] = inverted
+		}
+
+		reason, _ := clone["reason"].(string)
+		reason = strings.TrimSpace(reason)
+		if reason == "" {
+			reason = "Rollback logical autogenerado."
+		} else {
+			reason += " Rollback logical autogenerado."
+		}
+		clone["reason"] = reason
+
+		out = append(out, clone)
+	}
+
+	return out
+}
+
+func invertDelta(raw string) (string, bool) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", false
+	}
+
+	lower := strings.ToLower(value)
+	switch {
+	case strings.HasSuffix(lower, "%"):
+		number := strings.TrimSpace(value[:len(value)-1])
+		parsed, err := strconv.ParseFloat(number, 64)
+		if err != nil {
+			return "", false
+		}
+		return formatSigned(-parsed) + "%", true
+	case strings.HasSuffix(lower, "mv"):
+		number := strings.TrimSpace(value[:len(value)-2])
+		parsed, err := strconv.ParseFloat(number, 64)
+		if err != nil {
+			return "", false
+		}
+		return formatSigned(-parsed) + "mV", true
+	default:
+		return "", false
+	}
+}
+
+func formatSigned(value float64) string {
+	if math.Abs(value) < 1e-9 {
+		return "0"
+	}
+
+	formatted := fmt.Sprintf("%+.2f", value)
+	formatted = strings.TrimSuffix(formatted, "00")
+	formatted = strings.TrimSuffix(formatted, "0")
+	formatted = strings.TrimSuffix(formatted, ".")
+	return formatted
+}
+
+func invertImpactEstimate(impact map[string]any) map[string]any {
+	if len(impact) == 0 {
+		return map[string]any{}
+	}
+
+	cloned := deepCopyMap(impact)
+	before, beforeOK := cloned["before"].(map[string]any)
+	after, afterOK := cloned["after"].(map[string]any)
+	if beforeOK && afterOK {
+		cloned["before"] = after
+		cloned["after"] = before
+	}
+
+	delta, ok := cloned["delta"].(map[string]any)
+	if ok {
+		for key, value := range delta {
+			if number, castOK := toFloat(value); castOK {
+				delta[key] = -number
+			}
+		}
+		cloned["delta"] = delta
+	}
+
+	return cloned
+}
+
+func toFloat(value any) (float64, bool) {
+	switch number := value.(type) {
+	case float64:
+		return number, true
+	case float32:
+		return float64(number), true
+	case int:
+		return float64(number), true
+	case int32:
+		return float64(number), true
+	case int64:
+		return float64(number), true
+	case json.Number:
+		parsed, err := number.Float64()
+		if err != nil {
+			return 0, false
+		}
+		return parsed, true
+	default:
+		return 0, false
+	}
+}
+
+func deepCopyMap(input map[string]any) map[string]any {
+	if input == nil {
+		return map[string]any{}
+	}
+
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		return map[string]any{}
+	}
+
+	out := map[string]any{}
+	if err := json.Unmarshal(encoded, &out); err != nil {
+		return map[string]any{}
+	}
+	return out
 }
 
 func (r *PostgresRepository) Close() {

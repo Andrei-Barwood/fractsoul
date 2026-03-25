@@ -55,6 +55,58 @@
         "suggested_delta": "-15mV",
         "reason": "Reducir disipacion sin sacrificar estabilidad base."
       }
-    ]
+    ],
+    "guardrails": [
+      {
+        "parameter": "fan",
+        "requested_delta": "+12%",
+        "applied_delta": "+12%",
+        "action": "allow",
+        "reason": "ajuste dentro de limites operativos."
+      },
+      {
+        "parameter": "freq",
+        "requested_delta": "-6%",
+        "applied_delta": "-6%",
+        "action": "allow",
+        "reason": "ajuste dentro de limites operativos."
+      },
+      {
+        "parameter": "volt",
+        "requested_delta": "-15mV",
+        "applied_delta": "-15mV",
+        "action": "allow",
+        "reason": "ajuste dentro de limites operativos."
+      }
+    ],
+    "impact_estimate": {
+      "before": {
+        "hashrate_ths": 164.2,
+        "power_watts": 3510.7,
+        "temp_celsius": 92.5,
+        "fan_rpm": 7180,
+        "compensated_jth": 20.6
+      },
+      "after": {
+        "hashrate_ths": 156.1,
+        "power_watts": 3328.9,
+        "temp_celsius": 90.3,
+        "fan_rpm": 8041.6,
+        "compensated_jth": 20.1
+      },
+      "delta": {
+        "hashrate_ths_pct": -4.93,
+        "power_watts_pct": -5.18,
+        "temp_celsius_delta": -2.2,
+        "fan_rpm_pct": 11.99,
+        "compensated_jth_pct": -2.41
+      },
+      "confidence": 0.9,
+      "assumptions": [
+        "Estimacion heuristica basada en elasticidades historicas.",
+        "No incorpora cambios de firmware ni mantenimiento fisico.",
+        "Requiere validacion post-cambio en ventana de 30-60 minutos."
+      ]
+    }
   }
 }
