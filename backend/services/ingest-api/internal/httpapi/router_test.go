@@ -321,6 +321,132 @@ func TestAuthAcceptsValidAPIKey(t *testing.T) {
 	}
 }
 
+func TestRBACRejectsViewerRoleForIngest(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	publisher := &stubPublisher{}
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", nil, 1<<20, APIKeyAuthConfig{
+		Enabled:     true,
+		RBACEnabled: true,
+		Header:      "X-API-Key",
+		Keys:        []string{"viewer-key", "operator-key", "admin-key"},
+		DefaultRole: "viewer",
+		KeyRoles: map[string]string{
+			"viewer-key":   "viewer",
+			"operator-key": "operator",
+			"admin-key":    "admin",
+		},
+	})
+
+	payload := `{
+		"event_id":"550e8400-e29b-41d4-a716-446655440000",
+		"timestamp":"2026-03-22T14:00:00Z",
+		"site_id":"site-cl-01",
+		"rack_id":"rack-a1",
+		"miner_id":"asic-0001",
+		"firmware_version":"braiins-2026.1",
+		"metrics":{
+			"hashrate_ths":126.5,
+			"power_watts":3325,
+			"temp_celsius":71.2,
+			"fan_rpm":6400,
+			"efficiency_jth":26.3,
+			"status":"ok"
+		},
+		"tags":{"pool":"mainnet"}
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/telemetry/ingest", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "viewer-key")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusForbidden {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusForbidden, resp.Code, resp.Body.String())
+	}
+}
+
+func TestRBACAllowsOperatorRoleForIngest(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	publisher := &stubPublisher{}
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", nil, 1<<20, APIKeyAuthConfig{
+		Enabled:     true,
+		RBACEnabled: true,
+		Header:      "X-API-Key",
+		Keys:        []string{"viewer-key", "operator-key", "admin-key"},
+		DefaultRole: "viewer",
+		KeyRoles: map[string]string{
+			"viewer-key":   "viewer",
+			"operator-key": "operator",
+			"admin-key":    "admin",
+		},
+	})
+
+	payload := `{
+		"event_id":"550e8400-e29b-41d4-a716-446655440001",
+		"timestamp":"2026-03-22T14:01:00Z",
+		"site_id":"site-cl-01",
+		"rack_id":"rack-a1",
+		"miner_id":"asic-0002",
+		"firmware_version":"braiins-2026.1",
+		"metrics":{
+			"hashrate_ths":126.5,
+			"power_watts":3325,
+			"temp_celsius":71.2,
+			"fan_rpm":6400,
+			"efficiency_jth":26.3,
+			"status":"ok"
+		},
+		"tags":{"pool":"mainnet"}
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/telemetry/ingest", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "operator-key")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusAccepted {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusAccepted, resp.Code, resp.Body.String())
+	}
+}
+
+func TestRBACRejectsOperatorRoleForAdminEndpoint(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	publisher := &stubPublisher{}
+	repo := &stubRepository{}
+	router := NewRouter(logger, publisher, "telemetry.raw.v1", repo, 1<<20, APIKeyAuthConfig{
+		Enabled:     true,
+		RBACEnabled: true,
+		Header:      "X-API-Key",
+		Keys:        []string{"viewer-key", "operator-key", "admin-key"},
+		DefaultRole: "viewer",
+		KeyRoles: map[string]string{
+			"viewer-key":   "viewer",
+			"operator-key": "operator",
+			"admin-key":    "admin",
+		},
+	})
+
+	body := `{"reason":"apply test","requested_by":"ops@test"}`
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/v1/anomalies/miners/asic-000001/changes/apply?resolution=minute&limit=30",
+		bytes.NewBufferString(body),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "operator-key")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusForbidden {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusForbidden, resp.Code, resp.Body.String())
+	}
+}
+
 func TestIngestAcceptsValidPayload(t *testing.T) {
 	router, publisher := buildTestRouter()
 

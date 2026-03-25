@@ -45,18 +45,32 @@ func NewRouter(
 	v1 := router.Group("/v1")
 	v1.Use(APIKeyAuthMiddleware(logger, authConfig))
 	{
-		v1.POST("/telemetry/ingest", telemetryHandler.Ingest)
-		v1.GET("/telemetry/readings", telemetryReadHandler.Readings)
-		v1.GET("/telemetry/summary", telemetryReadHandler.Summary)
-		v1.GET("/telemetry/sites/:site_id/racks/:rack_id/readings", telemetryReadHandler.RackReadings)
-		v1.GET("/telemetry/miners/:miner_id/timeseries", telemetryReadHandler.MinerTimeSeries)
-		v1.GET("/efficiency/miners", efficiencyHandler.MinerEfficiency)
-		v1.GET("/efficiency/racks", efficiencyHandler.RackEfficiency)
-		v1.GET("/efficiency/sites", efficiencyHandler.SiteEfficiency)
-		v1.GET("/anomalies/miners/:miner_id/analyze", anomalyHandler.AnalyzeMiner)
-		v1.POST("/anomalies/miners/:miner_id/changes/apply", anomalyHandler.ApplyRecommendationChange)
-		v1.POST("/anomalies/changes/:change_id/rollback", anomalyHandler.RollbackRecommendationChange)
-		v1.GET("/anomalies/changes", anomalyHandler.ListRecommendationChanges)
+		writeGroup := v1.Group("")
+		writeGroup.Use(RequireRoles(logger, RoleOperator, RoleAdmin))
+		{
+			writeGroup.POST("/telemetry/ingest", telemetryHandler.Ingest)
+		}
+
+		readGroup := v1.Group("")
+		readGroup.Use(RequireRoles(logger, RoleViewer, RoleOperator, RoleAdmin))
+		{
+			readGroup.GET("/telemetry/readings", telemetryReadHandler.Readings)
+			readGroup.GET("/telemetry/summary", telemetryReadHandler.Summary)
+			readGroup.GET("/telemetry/sites/:site_id/racks/:rack_id/readings", telemetryReadHandler.RackReadings)
+			readGroup.GET("/telemetry/miners/:miner_id/timeseries", telemetryReadHandler.MinerTimeSeries)
+			readGroup.GET("/efficiency/miners", efficiencyHandler.MinerEfficiency)
+			readGroup.GET("/efficiency/racks", efficiencyHandler.RackEfficiency)
+			readGroup.GET("/efficiency/sites", efficiencyHandler.SiteEfficiency)
+			readGroup.GET("/anomalies/miners/:miner_id/analyze", anomalyHandler.AnalyzeMiner)
+			readGroup.GET("/anomalies/changes", anomalyHandler.ListRecommendationChanges)
+		}
+
+		adminGroup := v1.Group("")
+		adminGroup.Use(RequireRoles(logger, RoleAdmin))
+		{
+			adminGroup.POST("/anomalies/miners/:miner_id/changes/apply", anomalyHandler.ApplyRecommendationChange)
+			adminGroup.POST("/anomalies/changes/:change_id/rollback", anomalyHandler.RollbackRecommendationChange)
+		}
 	}
 
 	return router

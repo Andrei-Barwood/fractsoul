@@ -8,9 +8,12 @@ services:
       APP_PORT: "8080"
       GIN_MODE: release
       LOG_LEVEL: info
-      API_AUTH_ENABLED: "false"
-      API_KEY_HEADER: X-API-Key
-      API_KEYS: local-dev-key
+      API_AUTH_ENABLED: "${API_AUTH_ENABLED:-false}"
+      API_RBAC_ENABLED: "${API_RBAC_ENABLED:-false}"
+      API_KEY_HEADER: "${API_KEY_HEADER:-X-API-Key}"
+      API_KEYS: "${API_KEYS:-local-dev-key}"
+      API_DEFAULT_ROLE: "${API_DEFAULT_ROLE:-admin}"
+      API_KEY_ROLES: "${API_KEY_ROLES:-local-dev-key:admin}"
       NATS_URL: nats://nats:4222
       TELEMETRY_SUBJECT: telemetry.raw.v1
       TELEMETRY_STREAM: TELEMETRY

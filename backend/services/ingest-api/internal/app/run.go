@@ -24,6 +24,12 @@ func Run(ctx context.Context, cfg Config) error {
 	if cfg.APIAuthEnabled && len(cfg.APIKeys) == 0 {
 		return fmt.Errorf("api auth is enabled but API_KEYS is empty")
 	}
+	if cfg.APIRBACEnabled && !cfg.APIAuthEnabled {
+		return fmt.Errorf("api rbac requires API_AUTH_ENABLED=true")
+	}
+	if cfg.APIAuthEnabled && cfg.APIRBACEnabled && len(cfg.APIKeyRoles) == 0 {
+		return fmt.Errorf("api rbac is enabled but API_KEY_ROLES is empty")
+	}
 
 	streamSubjects := []string{cfg.TelemetrySubject, cfg.TelemetryDLQSubject}
 	publisher, err := telemetry.NewNATSPublisher(cfg.NATSURL, cfg.TelemetryStream, streamSubjects)
@@ -166,16 +172,22 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	authConfig := httpapi.APIKeyAuthConfig{
-		Enabled: cfg.APIAuthEnabled,
-		Header:  cfg.APIKeyHeader,
-		Keys:    cfg.APIKeys,
+		Enabled:     cfg.APIAuthEnabled,
+		Header:      cfg.APIKeyHeader,
+		Keys:        cfg.APIKeys,
+		RBACEnabled: cfg.APIRBACEnabled,
+		DefaultRole: cfg.APIDefaultRole,
+		KeyRoles:    cfg.APIKeyRoles,
 	}
 
 	logger.Info(
 		"http auth configuration",
 		"enabled", cfg.APIAuthEnabled,
+		"rbac_enabled", cfg.APIRBACEnabled,
 		"header", cfg.APIKeyHeader,
 		"keys_count", len(cfg.APIKeys),
+		"default_role", cfg.APIDefaultRole,
+		"role_bindings_count", len(cfg.APIKeyRoles),
 	)
 
 	router := httpapi.NewRouter(

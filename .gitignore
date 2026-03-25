@@ -4,6 +4,9 @@
 # env
 .env
 
+# local artifacts
+backups/
+
 # Go
 **/bin/
 **/coverage.out

@@ -13,8 +13,11 @@ Variables:
 - `GIN_MODE` (default `release`)
 - `LOG_LEVEL` (default `info`)
 - `API_AUTH_ENABLED` (default `false`)
+- `API_RBAC_ENABLED` (default `false`)
 - `API_KEY_HEADER` (default `X-API-Key`)
 - `API_KEYS` (lista separada por comas)
+- `API_DEFAULT_ROLE` (default `admin`)
+- `API_KEY_ROLES` (formato `api-key:role`, separados por comas; roles validos: `viewer|operator|admin`)
 - `NATS_URL` (default `nats://localhost:4222`)
 - `TELEMETRY_SUBJECT` (default `telemetry.raw.v1`)
 - `TELEMETRY_STREAM` (default `TELEMETRY`)
@@ -50,6 +53,8 @@ Variables:
 - `REPORT_RUN_ON_STARTUP` (default `true`)
 - `REPORT_OUTPUT_DIR` (opcional, guarda markdown generado)
 
+Para secretos sensibles se soporta `<ENV>_FILE` (ejemplo: `DATABASE_URL_FILE`, `API_KEYS_FILE`, `API_KEY_ROLES_FILE`, `ALERT_SMTP_PASSWORD_FILE`).
+
 ## Endpoints
 - `GET /healthz`
 - `GET /metrics`
@@ -66,6 +71,11 @@ Variables:
 - `POST /v1/anomalies/changes/:change_id/rollback`
 - `GET /v1/anomalies/changes`
 - `GET /dashboard/` (dashboard v0 embebido)
+
+RBAC (cuando `API_RBAC_ENABLED=true`):
+- `viewer`: endpoints de lectura (`GET /v1/...`).
+- `operator`: lectura + `POST /v1/telemetry/ingest`.
+- `admin`: todo lo anterior + cambios de recomendaciones (`/v1/anomalies/.../changes/*`).
 
 Ejemplos:
 
@@ -153,6 +163,9 @@ E2E full stack desde raiz del repo:
 ./scripts/e2e_alerts_flow.sh
 ./scripts/demo_s2_fallas_simuladas.sh
 ./scripts/generate_daily_report.sh
+./scripts/test_backup_restore.sh
+./scripts/test_resilience_restart_failover.sh
+./scripts/benchmark_pre_post.sh
 ```
 
 ## Simulador ASIC

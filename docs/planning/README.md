@@ -1,4 +1,4 @@
-# MVP Bitcoin Mining - Kickoff D1-D82
+# MVP Bitcoin Mining - Kickoff D1-D86
 
 ## Estado
 - [x] D1: Objetivo del MVP, alcance y no-objetivos
@@ -83,6 +83,10 @@
 - [x] D80: Plantilla de reporte ejecutivo-operativo
 - [x] D81: Revision semanal + cierre tecnico
 - [x] D82: Observabilidad (metricas, logs estructurados)
+- [x] D83: Hardening basico (auth/RBAC/secrets)
+- [x] D84: Prueba de backup/restore
+- [x] D85: Prueba de resiliencia (restart/failover simple)
+- [x] D86: Benchmark pre/post (J/TH, alert latency)
 
 ## Navegacion
 - [D1 Objetivo y Alcance](./D1_objetivo_alcance.md)
@@ -167,8 +171,13 @@
 - [D80 Plantilla reporte ejecutivo-operativo](./D80_plantilla_reporte_ejecutivo_operativo.md)
 - [D81 Revision semanal y cierre tecnico](./D81_revision_semanal_cierre_tecnico.md)
 - [D82 Observabilidad metricas y logs estructurados](./D82_observabilidad_metricas_logs_estructurados.md)
+- [D83 Hardening basico auth RBAC secrets](./D83_hardening_basico_auth_rbac_secrets.md)
+- [D84 Prueba backup restore](./D84_prueba_backup_restore.md)
+- [D85 Prueba resiliencia restart failover simple](./D85_prueba_resiliencia_restart_failover_simple.md)
+- [D86 Benchmark pre/post JTH alert latency](./D86_benchmark_pre_post_jth_alert_latency.md)
 
-## Siguiente ejecucion sugerida (S3)
-- Instrumentar observabilidad de servicio (metricas + trazabilidad de latencias).
-- Fortalecer hardening (auth, RBAC minimo y manejo de secretos).
-- Ejecutar pruebas de backup/restore y resiliencia con playbooks operativos.
+## Siguiente ejecucion sugerida (S3 cierre)
+- Preparar demo final de 5 minutos con guion y checklist.
+- Ejecutar demo y capturar feedback de audiencia tecnica.
+- Documentar resultados y plan de proximos 90 dias.
+- Cerrar retro final y backlog priorizado para S4.
