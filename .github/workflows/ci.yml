@@ -32,3 +32,56 @@ jobs:
 
       - name: Tests
         run: go test ./...
+
+  backend-integration-and-e2e:
+    runs-on: ubuntu-latest
+    needs: backend-lint-and-test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/services/ingest-api/go.mod
+          cache-dependency-path: backend/services/ingest-api/go.sum
+
+      - name: Download dependencies
+        working-directory: backend/services/ingest-api
+        run: go mod download
+
+      - name: Start required services
+        run: docker compose up -d --build timescaledb nats ingest-api
+
+      - name: Wait for ingest API health
+        run: |
+          for attempt in {1..120}; do
+            if curl -fsS http://localhost:8080/healthz >/dev/null; then
+              echo "ingest-api is healthy"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "ingest-api failed to become healthy in time" >&2
+          docker compose ps
+          exit 1
+
+      - name: Apply DB migrations
+        run: ./scripts/migrate_timescaledb.sh
+
+      - name: Run integration tests
+        working-directory: backend/services/ingest-api
+        run: go test -count=1 -tags=integration ./tests/integration -v
+
+      - name: Run e2e tests
+        working-directory: backend/services/ingest-api
+        run: go test -count=1 -tags=e2e ./tests/e2e -v
+
+      - name: Dump compose logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=300
+
+      - name: Stop services
+        if: always()
+        run: docker compose down -v

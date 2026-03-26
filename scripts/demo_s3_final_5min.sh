@@ -9,7 +9,7 @@ API_URL="${API_URL:-http://localhost:8080}"
 API_KEY="${API_KEY:-}"
 API_KEY_HEADER="${API_KEY_HEADER:-X-API-Key}"
 REPORT_TIMEZONE="${REPORT_TIMEZONE:-America/Santiago}"
-REPORT_DATE="${REPORT_DATE:-$(date +%Y-%m-%d)}"
+REPORT_DATE="${REPORT_DATE:-}"
 
 DEMO_SITE_ID="${DEMO_SITE_ID:-site-cl-01}"
 DEMO_RACK_ID="${DEMO_RACK_ID:-rack-cl-01-01}"
@@ -60,9 +60,31 @@ curl_post_auth() {
   fi
 }
 
+resolve_report_date_in_timezone() {
+  local timezone="$1"
+  python3 - "${timezone}" <<'PY'
+import sys
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+timezone = sys.argv[1].strip() or "UTC"
+try:
+    tz = ZoneInfo(timezone)
+except Exception:
+    print(f"invalid REPORT_TIMEZONE: {timezone}", file=sys.stderr)
+    raise SystemExit(1)
+
+print(datetime.now(tz).strftime("%Y-%m-%d"))
+PY
+}
+
 if ! command -v python3 >/dev/null 2>&1; then
   echo "python3 is required for parsing JSON responses." >&2
   exit 1
+fi
+
+if [[ -z "${REPORT_DATE}" ]]; then
+  REPORT_DATE="$(resolve_report_date_in_timezone "${REPORT_TIMEZONE}")"
 fi
 
 if ! docker ps --format '{{.Names}}' | grep -q "^${TIMESCALEDB_CONTAINER}$"; then
@@ -128,6 +150,8 @@ echo "[6/9] Generating executive-operational daily report..."
   -timezone "${REPORT_TIMEZONE}" \
   -date "${REPORT_DATE}" >/dev/null
 
+REPORT_DATE_SQL="${REPORT_DATE//\'/\'\'}"
+REPORT_TIMEZONE_SQL="${REPORT_TIMEZONE//\'/\'\'}"
 report_row="$(run_sql "
 SELECT
   report_id,
@@ -139,12 +163,14 @@ SELECT
   COALESCE((report_json->'changes'->>'applied')::int, 0),
   COALESCE((report_json->'changes'->>'rolled_back')::int, 0)
 FROM daily_reports
+WHERE report_date = '${REPORT_DATE_SQL}'::date
+  AND timezone = '${REPORT_TIMEZONE_SQL}'
 ORDER BY generated_at DESC
 LIMIT 1;
 ")"
 
 if [[ -z "${report_row}" ]]; then
-  echo "No daily report row found after report generation." >&2
+  echo "No daily report row found for report_date=${REPORT_DATE} timezone=${REPORT_TIMEZONE}." >&2
   exit 1
 fi
 
