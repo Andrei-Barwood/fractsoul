@@ -1,0 +1,6 @@
+services:
+  timescaledb:
+    # CI validates the real migration path, so keep docker-entrypoint-initdb.d empty.
+    volumes:
+      - timescaledb-data:/var/lib/postgresql/data
+      - ./.github/ci/timescaledb-empty-init:/docker-entrypoint-initdb.d:ro

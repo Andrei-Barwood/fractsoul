@@ -51,8 +51,27 @@ jobs:
         working-directory: backend/services/ingest-api
         run: go mod download
 
-      - name: Start required services
-        run: docker compose up -d --build timescaledb nats ingest-api
+      - name: Start DB and NATS
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build timescaledb nats
+
+      - name: Wait for TimescaleDB health
+        run: |
+          for attempt in {1..120}; do
+            if docker exec fractsoul-timescaledb pg_isready -U postgres -d mining >/dev/null; then
+              echo "timescaledb is healthy"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "timescaledb failed to become healthy in time" >&2
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml ps
+          exit 1
+
+      - name: Apply DB migrations
+        run: ./scripts/migrate_timescaledb.sh
+
+      - name: Start ingest API
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build ingest-api
 
       - name: Wait for ingest API health
         run: |
@@ -64,11 +83,8 @@ jobs:
             sleep 1
           done
           echo "ingest-api failed to become healthy in time" >&2
-          docker compose ps
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml ps
           exit 1
-
-      - name: Apply DB migrations
-        run: ./scripts/migrate_timescaledb.sh
 
       - name: Run integration tests
         working-directory: backend/services/ingest-api
@@ -80,8 +96,8 @@ jobs:
 
       - name: Dump compose logs on failure
         if: failure()
-        run: docker compose logs --no-color --tail=300
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --no-color --tail=300
 
       - name: Stop services
         if: always()
-        run: docker compose down -v
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
