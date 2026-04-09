@@ -1,0 +1,16 @@
+{
+  "requested_by": "ops@fractsoul.local",
+  "ambient_celsius": 29.1,
+  "requests": [
+    {
+      "rack_id": "rack-cl-01-01",
+      "delta_kw": 8,
+      "reason": "release partial curtailment after thermal recovery"
+    },
+    {
+      "rack_id": "rack-cl-01-02",
+      "delta_kw": 15,
+      "reason": "recover hash budget in preferred rack"
+    }
+  ]
+}

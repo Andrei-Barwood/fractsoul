@@ -6,6 +6,7 @@
 
 # local artifacts
 backups/
+.localdev/
 
 # Go
 **/bin/

@@ -1,0 +1,13 @@
+{
+  "snapshot_id": "snapshot-energy-20260409-150000-site-cl-01",
+  "event_id": "6e28de6d-b64c-4a7d-bfc8-fbcab6e5de66",
+  "event_type": "load_budget_updated",
+  "occurred_at": "2026-04-09T15:00:00Z",
+  "site_id": "site-cl-01",
+  "policy_mode": "advisory-first",
+  "nominal_capacity_kw": 20000,
+  "safe_capacity_kw": 16532.5,
+  "current_load_kw": 11880.3,
+  "available_capacity_kw": 4652.2,
+  "constraint_flags": []
+}

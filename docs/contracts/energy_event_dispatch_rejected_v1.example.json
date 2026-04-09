@@ -1,0 +1,14 @@
+{
+  "snapshot_id": "snapshot-energy-20260409-150500-site-cl-01",
+  "event_id": "807ec394-44d9-470f-9b37-597c70d7a16b",
+  "event_type": "dispatch_rejected",
+  "occurred_at": "2026-04-09T15:05:00Z",
+  "site_id": "site-cl-01",
+  "policy_mode": "advisory-first",
+  "requested_by": "ops@fractsoul.local",
+  "rack_id": "rack-cl-01-02",
+  "requested_delta_kw": 15,
+  "accepted_delta_kw": 6.2,
+  "code": "feeder_capacity_exceeded",
+  "message": "requested dispatch would exceed feeder safe capacity"
+}

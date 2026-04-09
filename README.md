@@ -5,9 +5,10 @@ Monorepo base para el MVP de operacion de granjas de Bitcoin mining.
 ## Estructura
 
 - `backend/services/ingest-api`: servicio de ingesta + lectura de telemetria (Go + Gin + NATS + Postgres).
+- `backend/services/energy-orchestrator`: servicio de presupuesto de potencia, snapshots y validacion de dispatch (Go + Gin + Postgres + NATS).
 - `frontend/apps/dashboard`: placeholder de UI operativa.
 - `infra/docker`: recursos de contenedores para desarrollo local.
-- `docs/planning`: documentos de ejecucion D1-D90 y ADRs.
+- `docs/planning`: documentos de ejecucion D1-D100 y ADRs.
 - `docs/operations`: evidencias operativas (backup/restore, resiliencia, benchmark, demo final).
 - `docs/contracts`: contratos JSON/schema.
 - `docs/engineering`: convenciones tecnicas.
@@ -41,6 +42,12 @@ Dashboard operativo v0:
 open http://localhost:8080/dashboard/
 ```
 
+Budget operativo inicial del `energy-orchestrator`:
+
+```bash
+curl "http://localhost:8081/v1/energy/sites/site-cl-01/budget?include_context=true"
+```
+
 3. Probar endpoint de ingesta:
 
 ```bash
@@ -55,7 +62,7 @@ curl -X POST http://localhost:8080/v1/telemetry/ingest \
 ./scripts/bootstrap_timescaledb.sh
 ```
 
-5. Cargar seed sintetico (100 equipos):
+5. Cargar seed sintetico y energetico base:
 
 ```bash
 ./scripts/seed_synthetic_data.sh
@@ -132,6 +139,21 @@ curl "http://localhost:8080/v1/anomalies/miners/asic-000001/analyze?resolution=m
 ./scripts/demo_s3_final_5min.sh
 ```
 
+17. Validar presupuesto, snapshots y dispatch energetico inicial (S4 bootstrap):
+
+```bash
+curl "http://localhost:8081/v1/energy/sites/site-cl-01/budget?include_context=true"
+curl -X POST "http://localhost:8081/v1/energy/sites/site-cl-01/dispatch/validate" \
+  -H 'Content-Type: application/json' \
+  -d @docs/contracts/energy_dispatch_validate_request_v1.example.json
+```
+
+18. Ejecutar la prueba E2E completa del `energy-orchestrator` con un solo comando:
+
+```bash
+./scripts/e2e_energy_orchestrator.sh
+```
+
 ## CI
 
 La pipeline minima corre en `.github/workflows/ci.yml` e incluye:
@@ -147,3 +169,8 @@ Ver [docs/planning/README.md](docs/planning/README.md).
 
 Especificacion minima disponible en:
 - [docs/openapi/ingest_api_v1.yaml](docs/openapi/ingest_api_v1.yaml)
+
+Contratos base del `energy-orchestrator` en:
+- [docs/contracts/energy_load_budget_response_v1.example.json](docs/contracts/energy_load_budget_response_v1.example.json)
+- [docs/contracts/energy_dispatch_validate_request_v1.example.json](docs/contracts/energy_dispatch_validate_request_v1.example.json)
+- [docs/contracts/energy_dispatch_validate_response_v1.example.json](docs/contracts/energy_dispatch_validate_response_v1.example.json)

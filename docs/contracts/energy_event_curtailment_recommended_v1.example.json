@@ -1,0 +1,14 @@
+{
+  "snapshot_id": "snapshot-energy-20260409-150200-site-cl-01",
+  "event_id": "0b447fe3-26e1-47d9-afcd-5d22707e6d8a",
+  "event_type": "curtailment_recommended",
+  "occurred_at": "2026-04-09T15:02:00Z",
+  "site_id": "site-cl-01",
+  "policy_mode": "advisory-first",
+  "recommended_reduction_kw": 180,
+  "reason": "current load exceeds safe site capacity after derating and reserve",
+  "affected_racks": [
+    "rack-cl-01-01",
+    "rack-cl-01-02"
+  ]
+}

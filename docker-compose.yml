@@ -47,6 +47,46 @@ services:
       retries: 5
       start_period: 10s
 
+  energy-orchestrator:
+    build:
+      context: ./backend/services/energy-orchestrator
+      dockerfile: Dockerfile
+    container_name: fractsoul-energy-orchestrator
+    environment:
+      APP_PORT: "8081"
+      GIN_MODE: release
+      LOG_LEVEL: info
+      API_AUTH_ENABLED: "${API_AUTH_ENABLED:-false}"
+      API_RBAC_ENABLED: "${API_RBAC_ENABLED:-false}"
+      API_KEY_HEADER: "${API_KEY_HEADER:-X-API-Key}"
+      API_KEYS: "${API_KEYS:-local-dev-key}"
+      API_DEFAULT_ROLE: "${API_DEFAULT_ROLE:-admin}"
+      API_KEY_ROLES: "${API_KEY_ROLES:-local-dev-key:admin}"
+      DATABASE_URL: postgres://postgres:postgres@timescaledb:5432/mining?sslmode=disable
+      ENERGY_EVENTS_ENABLED: "true"
+      NATS_URL: nats://nats:4222
+      ENERGY_STREAM: ENERGY
+      FRACTSOUL_API_BASE_URL: http://ingest-api:8080
+      FRACTSOUL_API_KEY: "${FRACTSOUL_API_KEY:-local-dev-key}"
+      FRACTSOUL_API_TIMEOUT: 5s
+      ENERGY_CONTEXT_RACK_LIMIT: "3"
+      ENERGY_CONTEXT_WINDOW_MINUTES: "60"
+    ports:
+      - "8081:8081"
+    depends_on:
+      ingest-api:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   daily-reporter:
     build:
       context: ./backend/services/ingest-api

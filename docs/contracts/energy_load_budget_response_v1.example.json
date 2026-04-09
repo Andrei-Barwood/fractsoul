@@ -1,0 +1,125 @@
+{
+  "request_id": "6e6fd13a-6f2a-4c96-b8a1-872c1d1c16b9",
+  "snapshot_id": "snapshot-energy-20260409-150000-site-cl-01",
+  "budget": {
+    "site_id": "site-cl-01",
+    "policy_mode": "advisory-first",
+    "calculated_at": "2026-04-09T15:00:00Z",
+    "telemetry_observed_at": "2026-04-09T14:59:55Z",
+    "ambient_celsius": 28.5,
+    "nominal_capacity_kw": 20000,
+    "effective_capacity_kw": 19450,
+    "reserved_capacity_kw": 2917.5,
+    "safe_capacity_kw": 16532.5,
+    "current_load_kw": 11880.3,
+    "available_capacity_kw": 4652.2,
+    "safe_dispatchable_kw": 4652.2,
+    "constraint_flags": [],
+    "racks": [
+      {
+        "rack_id": "rack-cl-01-01",
+        "bus_id": "bus-cl-01-a",
+        "feeder_id": "feeder-cl-01-01",
+        "pdu_id": "pdu-cl-01-01",
+        "current_load_kw": 112.4,
+        "nominal_capacity_kw": 120,
+        "effective_capacity_kw": 120,
+        "reserved_capacity_kw": 12,
+        "safe_capacity_kw": 108,
+        "available_capacity_kw": 0,
+        "thermal_density_limit_kw": 140,
+        "thermal_headroom_kw": 27.6,
+        "safe_dispatchable_kw": 0,
+        "constraint_flags": [
+          "rack_safe_capacity_exhausted"
+        ]
+      },
+      {
+        "rack_id": "rack-cl-01-02",
+        "bus_id": "bus-cl-01-a",
+        "feeder_id": "feeder-cl-01-02",
+        "pdu_id": "pdu-cl-01-02",
+        "current_load_kw": 101.8,
+        "nominal_capacity_kw": 120,
+        "effective_capacity_kw": 120,
+        "reserved_capacity_kw": 12,
+        "safe_capacity_kw": 108,
+        "available_capacity_kw": 6.2,
+        "thermal_density_limit_kw": 140,
+        "thermal_headroom_kw": 38.2,
+        "safe_dispatchable_kw": 6.2,
+        "constraint_flags": [
+          "feeder_headroom_limited"
+        ]
+      }
+    ]
+  },
+  "fractsoul_context": {
+    "source": "fractsoul-ingest-api",
+    "window_minutes": 60,
+    "site_efficiency": {
+      "site_id": "site-cl-01",
+      "miners": 100,
+      "racks": 5,
+      "samples": 6000,
+      "avg_hashrate_ths": 116.2,
+      "avg_power_watts": 3310.5,
+      "avg_temp_celsius": 67.1,
+      "avg_ambient_celsius": 28.4,
+      "raw_jth": 28.49,
+      "compensated_jth": 28.22,
+      "last_seen_at": "2026-04-09T14:59:55Z"
+    },
+    "rack_efficiency": [
+      {
+        "site_id": "site-cl-01",
+        "rack_id": "rack-cl-01-01",
+        "miners": 20,
+        "samples": 1200,
+        "avg_hashrate_ths": 114.7,
+        "avg_power_watts": 3342.8,
+        "avg_temp_celsius": 69.4,
+        "avg_ambient_celsius": 28.8,
+        "raw_jth": 29.14,
+        "compensated_jth": 28.83,
+        "last_seen_at": "2026-04-09T14:59:55Z"
+      },
+      {
+        "site_id": "site-cl-01",
+        "rack_id": "rack-cl-01-02",
+        "miners": 20,
+        "samples": 1200,
+        "avg_hashrate_ths": 115.9,
+        "avg_power_watts": 3321.2,
+        "avg_temp_celsius": 67.8,
+        "avg_ambient_celsius": 28.5,
+        "raw_jth": 28.66,
+        "compensated_jth": 28.39,
+        "last_seen_at": "2026-04-09T14:59:55Z"
+      }
+    ],
+    "telemetry_summary": {
+      "window_minutes": 60,
+      "samples": 6000,
+      "avg_hashrate_ths": 116.2,
+      "avg_power_watts": 3310.5,
+      "avg_temp_celsius": 67.1,
+      "p95_temp_celsius": 74.2,
+      "max_temp_celsius": 79.1,
+      "avg_fan_rpm": 5820,
+      "avg_efficiency_jth": 28.49
+    },
+    "constrained_rack_anomalies": [
+      {
+        "rack_id": "rack-cl-01-01",
+        "miner_id": "asic-000001",
+        "summary_line": "hotspot thermal pressure with mild hash degradation",
+        "severity_label": "high",
+        "severity_score": 0.82,
+        "probable_cause": "airflow restriction or elevated ambient temperature",
+        "hotspot_triggered": true,
+        "hash_degradation_triggered": true
+      }
+    ]
+  }
+}
