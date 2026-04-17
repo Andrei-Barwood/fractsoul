@@ -17,6 +17,22 @@ if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
   exit 1
 fi
 
+wait_for_database_ready() {
+  local max_attempts="${DB_READY_MAX_ATTEMPTS:-60}"
+  local sleep_seconds="${DB_READY_SLEEP_SECONDS:-1}"
+
+  for attempt in $(seq 1 "${max_attempts}"); do
+    if docker exec "${CONTAINER_NAME}" psql -tA -U "${DB_USER}" -d "${DB_NAME}" -c "SELECT 1" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "${sleep_seconds}"
+  done
+
+  echo "Database ${DB_NAME} in ${CONTAINER_NAME} did not become query-ready in time." >&2
+  docker logs --tail 100 "${CONTAINER_NAME}" >&2 || true
+  exit 1
+}
+
 migration_materialized_sql() {
   case "$1" in
     0001_initial_schema.sql)
@@ -88,6 +104,8 @@ mark_existing_migration() {
     >/dev/null
   return 0
 }
+
+wait_for_database_ready
 
 docker exec -i "${CONTAINER_NAME}" psql -v ON_ERROR_STOP=1 -U "${DB_USER}" -d "${DB_NAME}" <<'SQL'
 CREATE TABLE IF NOT EXISTS schema_migrations (

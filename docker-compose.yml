@@ -121,7 +121,7 @@ services:
       - timescaledb-data:/var/lib/postgresql/data
       - ./infra/docker/timescaledb/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d mining"]
+      test: ["CMD-SHELL", "psql -U postgres -d mining -tA -c 'SELECT 1' >/dev/null"]
       interval: 10s
       timeout: 5s
       retries: 5

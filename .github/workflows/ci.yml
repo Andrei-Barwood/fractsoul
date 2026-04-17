@@ -54,16 +54,16 @@ jobs:
       - name: Start DB and NATS
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build timescaledb nats
 
-      - name: Wait for TimescaleDB health
+      - name: Wait for TimescaleDB readiness
         run: |
           for attempt in {1..120}; do
-            if docker exec fractsoul-timescaledb pg_isready -U postgres -d mining >/dev/null; then
-              echo "timescaledb is healthy"
+            if docker exec fractsoul-timescaledb psql -U postgres -d mining -tA -c "SELECT 1" >/dev/null 2>&1; then
+              echo "timescaledb is query-ready"
               exit 0
             fi
             sleep 1
           done
-          echo "timescaledb failed to become healthy in time" >&2
+          echo "timescaledb failed to become query-ready in time" >&2
           docker compose -f docker-compose.yml -f docker-compose.ci.yml ps
           exit 1
 
