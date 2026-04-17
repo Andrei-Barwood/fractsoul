@@ -8,12 +8,15 @@ INSERT INTO energy_site_profiles (
   ambient_reference_c,
   ambient_derate_start_c,
   ambient_derate_pct_per_deg,
+  ramp_up_kw_per_interval,
+  ramp_down_kw_per_interval,
+  ramp_interval_seconds,
   advisory_mode,
   notes
 )
 VALUES
-  ('site-cl-01', 'Copiapo Norte Campus', 20, 15, 25, 30, 0.50, 'advisory-first', 'Synthetic 20 MW site profile for energy-orchestrator demo.'),
-  ('site-cl-02', 'Calama Sur Campus', 24, 15, 25, 30, 0.50, 'advisory-first', 'Synthetic 24 MW site profile for energy-orchestrator demo.')
+  ('site-cl-01', 'Copiapo Norte Campus', 20, 15, 25, 30, 0.50, 30, 40, 300, 'advisory-first', 'Synthetic 20 MW site profile for energy-orchestrator demo.'),
+  ('site-cl-02', 'Calama Sur Campus', 24, 15, 25, 30, 0.50, 20, 35, 300, 'advisory-first', 'Synthetic 24 MW site profile for energy-orchestrator demo.')
 ON CONFLICT (site_id) DO UPDATE
 SET campus_name = EXCLUDED.campus_name,
     target_capacity_mw = EXCLUDED.target_capacity_mw,
@@ -21,6 +24,9 @@ SET campus_name = EXCLUDED.campus_name,
     ambient_reference_c = EXCLUDED.ambient_reference_c,
     ambient_derate_start_c = EXCLUDED.ambient_derate_start_c,
     ambient_derate_pct_per_deg = EXCLUDED.ambient_derate_pct_per_deg,
+    ramp_up_kw_per_interval = EXCLUDED.ramp_up_kw_per_interval,
+    ramp_down_kw_per_interval = EXCLUDED.ramp_down_kw_per_interval,
+    ramp_interval_seconds = EXCLUDED.ramp_interval_seconds,
     advisory_mode = EXCLUDED.advisory_mode,
     notes = EXCLUDED.notes,
     updated_at = NOW();
@@ -176,19 +182,25 @@ INSERT INTO energy_rack_profiles (
   operating_margin_pct,
   thermal_density_limit_kw,
   aisle_zone,
+  criticality_class,
+  criticality_reason,
+  safety_locked,
+  safety_lock_reason,
+  ramp_up_kw_per_interval,
+  ramp_down_kw_per_interval,
   status
 )
 VALUES
-  ('rack-cl-01-01', 'site-cl-01', 'bus-cl-01-a', 'feeder-cl-01-01', 'pdu-cl-01-01', 120, 10, 140, 'aisle-a', 'active'),
-  ('rack-cl-01-02', 'site-cl-01', 'bus-cl-01-a', 'feeder-cl-01-02', 'pdu-cl-01-02', 120, 10, 140, 'aisle-a', 'active'),
-  ('rack-cl-01-03', 'site-cl-01', 'bus-cl-01-a', 'feeder-cl-01-03', 'pdu-cl-01-03', 120, 10, 140, 'aisle-a', 'active'),
-  ('rack-cl-01-04', 'site-cl-01', 'bus-cl-01-b', 'feeder-cl-01-04', 'pdu-cl-01-04', 120, 10, 140, 'aisle-b', 'active'),
-  ('rack-cl-01-05', 'site-cl-01', 'bus-cl-01-b', 'feeder-cl-01-05', 'pdu-cl-01-05', 120, 10, 140, 'aisle-b', 'active'),
-  ('rack-cl-02-01', 'site-cl-02', 'bus-cl-02-a', 'feeder-cl-02-01', 'pdu-cl-02-01', 120, 10, 140, 'aisle-a', 'active'),
-  ('rack-cl-02-02', 'site-cl-02', 'bus-cl-02-a', 'feeder-cl-02-02', 'pdu-cl-02-02', 120, 10, 140, 'aisle-a', 'active'),
-  ('rack-cl-02-03', 'site-cl-02', 'bus-cl-02-a', 'feeder-cl-02-03', 'pdu-cl-02-03', 120, 10, 140, 'aisle-a', 'active'),
-  ('rack-cl-02-04', 'site-cl-02', 'bus-cl-02-b', 'feeder-cl-02-04', 'pdu-cl-02-04', 120, 10, 140, 'aisle-b', 'active'),
-  ('rack-cl-02-05', 'site-cl-02', 'bus-cl-02-b', 'feeder-cl-02-05', 'pdu-cl-02-05', 120, 10, 140, 'aisle-b', 'active')
+  ('rack-cl-01-01', 'site-cl-01', 'bus-cl-01-a', 'feeder-cl-01-01', 'pdu-cl-01-01', 120, 10, 140, 'aisle-a', 'preferred_production', 'Primary preferred production rack for CL01.', FALSE, '', 0, 0, 'active'),
+  ('rack-cl-01-02', 'site-cl-01', 'bus-cl-01-a', 'feeder-cl-01-02', 'pdu-cl-01-02', 120, 10, 140, 'aisle-a', 'normal_production', 'Baseline production rack for CL01.', FALSE, '', 0, 0, 'active'),
+  ('rack-cl-01-03', 'site-cl-01', 'bus-cl-01-a', 'feeder-cl-01-03', 'pdu-cl-01-03', 120, 10, 140, 'aisle-a', 'sacrificable_load', 'Curtailable rack used for load shedding demonstrations.', FALSE, '', 10, 15, 'active'),
+  ('rack-cl-01-04', 'site-cl-01', 'bus-cl-01-b', 'feeder-cl-01-04', 'pdu-cl-01-04', 120, 10, 140, 'aisle-b', 'normal_production', 'Normal production rack on bus CL01-B.', FALSE, '', 0, 0, 'active'),
+  ('rack-cl-01-05', 'site-cl-01', 'bus-cl-01-b', 'feeder-cl-01-05', 'pdu-cl-01-05', 120, 10, 140, 'aisle-b', 'normal_production', 'Normal production rack on bus CL01-B.', FALSE, '', 0, 0, 'active'),
+  ('rack-cl-02-01', 'site-cl-02', 'bus-cl-02-a', 'feeder-cl-02-01', 'pdu-cl-02-01', 120, 10, 140, 'aisle-a', 'preferred_production', 'Preferred rack for CL02 steady production.', FALSE, '', 0, 0, 'active'),
+  ('rack-cl-02-02', 'site-cl-02', 'bus-cl-02-a', 'feeder-cl-02-02', 'pdu-cl-02-02', 120, 10, 140, 'aisle-a', 'normal_production', 'Standard production rack for CL02.', FALSE, '', 0, 0, 'active'),
+  ('rack-cl-02-03', 'site-cl-02', 'bus-cl-02-a', 'feeder-cl-02-03', 'pdu-cl-02-03', 120, 10, 140, 'aisle-a', 'safety_blocked', 'Rack reserved for safety isolation exercises.', TRUE, 'Isolation locked after repeated thermal trips in the aisle.', 0, 0, 'active'),
+  ('rack-cl-02-04', 'site-cl-02', 'bus-cl-02-b', 'feeder-cl-02-04', 'pdu-cl-02-04', 120, 10, 140, 'aisle-b', 'sacrificable_load', 'Curtailable rack on CL02 for fast site shedding.', FALSE, '', 8, 20, 'active'),
+  ('rack-cl-02-05', 'site-cl-02', 'bus-cl-02-b', 'feeder-cl-02-05', 'pdu-cl-02-05', 120, 10, 140, 'aisle-b', 'normal_production', 'Standard production rack on CL02 bus B.', FALSE, '', 0, 0, 'active')
 ON CONFLICT (rack_id) DO UPDATE
 SET site_id = EXCLUDED.site_id,
     bus_id = EXCLUDED.bus_id,
@@ -198,6 +210,12 @@ SET site_id = EXCLUDED.site_id,
     operating_margin_pct = EXCLUDED.operating_margin_pct,
     thermal_density_limit_kw = EXCLUDED.thermal_density_limit_kw,
     aisle_zone = EXCLUDED.aisle_zone,
+    criticality_class = EXCLUDED.criticality_class,
+    criticality_reason = EXCLUDED.criticality_reason,
+    safety_locked = EXCLUDED.safety_locked,
+    safety_lock_reason = EXCLUDED.safety_lock_reason,
+    ramp_up_kw_per_interval = EXCLUDED.ramp_up_kw_per_interval,
+    ramp_down_kw_per_interval = EXCLUDED.ramp_down_kw_per_interval,
     status = EXCLUDED.status,
     updated_at = NOW();
 
@@ -208,21 +226,23 @@ INSERT INTO energy_miner_groups (
   group_name,
   miner_model,
   priority_class,
+  criticality_class,
   target_miners,
   nominal_group_kw,
   status
 )
 VALUES
-  ('group-cl-01-s21', 'site-cl-01', NULL, 'CL01 S21 Preferred', 'S21', 'preferred', 25, 90, 'active'),
-  ('group-cl-01-s19xp', 'site-cl-01', NULL, 'CL01 S19XP Standard', 'S19XP', 'standard', 25, 76, 'active'),
-  ('group-cl-02-s21', 'site-cl-02', NULL, 'CL02 S21 Preferred', 'S21', 'preferred', 25, 90, 'active'),
-  ('group-cl-02-s19xp', 'site-cl-02', NULL, 'CL02 S19XP Standard', 'S19XP', 'standard', 25, 76, 'active')
+  ('group-cl-01-s21', 'site-cl-01', NULL, 'CL01 S21 Preferred', 'S21', 'preferred', 'preferred_production', 25, 90, 'active'),
+  ('group-cl-01-s19xp', 'site-cl-01', NULL, 'CL01 S19XP Standard', 'S19XP', 'standard', 'normal_production', 25, 76, 'active'),
+  ('group-cl-02-s21', 'site-cl-02', NULL, 'CL02 S21 Preferred', 'S21', 'preferred', 'preferred_production', 25, 90, 'active'),
+  ('group-cl-02-s19xp', 'site-cl-02', NULL, 'CL02 S19XP Sacrificable', 'S19XP', 'sacrificable', 'sacrificable_load', 25, 76, 'active')
 ON CONFLICT (miner_group_id) DO UPDATE
 SET site_id = EXCLUDED.site_id,
     rack_id = EXCLUDED.rack_id,
     group_name = EXCLUDED.group_name,
     miner_model = EXCLUDED.miner_model,
     priority_class = EXCLUDED.priority_class,
+    criticality_class = EXCLUDED.criticality_class,
     target_miners = EXCLUDED.target_miners,
     nominal_group_kw = EXCLUDED.nominal_group_kw,
     status = EXCLUDED.status,

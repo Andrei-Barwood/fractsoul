@@ -8,6 +8,7 @@ import (
 
 	"github.com/fractsoul/mvp/backend/services/energy-orchestrator/internal/orchestrator"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -121,6 +122,9 @@ SELECT
   esp.ambient_reference_c,
   esp.ambient_derate_start_c,
   esp.ambient_derate_pct_per_deg,
+  esp.ramp_up_kw_per_interval,
+  esp.ramp_down_kw_per_interval,
+  esp.ramp_interval_seconds,
   esp.advisory_mode
 FROM energy_site_profiles esp
 WHERE esp.site_id = $1
@@ -132,6 +136,9 @@ WHERE esp.site_id = $1
 		&input.Site.AmbientReferenceC,
 		&input.Site.AmbientDerateStartC,
 		&input.Site.AmbientDeratePctPerDeg,
+		&input.Site.RampUpKWPerInterval,
+		&input.Site.RampDownKWPerInterval,
+		&input.Site.RampIntervalSeconds,
 		&input.Site.AdvisoryMode,
 	)
 	if err != nil {
@@ -398,6 +405,12 @@ SELECT
   rp.operating_margin_pct,
   rp.thermal_density_limit_kw,
   rp.aisle_zone,
+  rp.criticality_class,
+  rp.criticality_reason,
+  rp.safety_locked,
+  COALESCE(rp.safety_lock_reason, ''),
+  rp.ramp_up_kw_per_interval,
+  rp.ramp_down_kw_per_interval,
   rp.status,
   EXISTS (
     SELECT 1
@@ -432,6 +445,12 @@ ORDER BY rp.rack_id
 			&item.OperatingMarginPct,
 			&item.ThermalDensityLimitKW,
 			&item.AisleZone,
+			&item.CriticalityClass,
+			&item.CriticalityReason,
+			&item.SafetyLocked,
+			&item.SafetyLockReason,
+			&item.RampUpKWPerInterval,
+			&item.RampDownKWPerInterval,
 			&status,
 			&item.MaintenanceActive,
 		); err != nil {
@@ -473,4 +492,146 @@ GROUP BY rack_id
 	}
 
 	return nil
+}
+
+func (r *PostgresRepository) LoadHistoricalReplayInput(ctx context.Context, siteID string, day time.Time) (orchestrator.HistoricalReplayInput, error) {
+	input := orchestrator.HistoricalReplayInput{
+		Day: day.UTC(),
+	}
+
+	budgetInput, err := r.LoadBudgetInput(ctx, siteID, day.UTC())
+	if err != nil {
+		return orchestrator.HistoricalReplayInput{}, err
+	}
+	input.Site = budgetInput.Site
+
+	start := time.Date(day.UTC().Year(), day.UTC().Month(), day.UTC().Day(), 0, 0, 0, 0, time.UTC)
+	end := start.Add(24 * time.Hour)
+
+	rows, err := r.pool.Query(ctx, `
+WITH rack_readings AS (
+  SELECT
+    time_bucket(INTERVAL '5 minutes', tr.ts) AS bucket,
+    tr.site_id,
+    tr.rack_id,
+    tr.miner_id,
+    AVG(tr.hashrate_ths) AS avg_hashrate_ths,
+    AVG(tr.power_watts) AS avg_power_watts,
+    AVG(tr.temp_celsius) AS avg_temp_celsius,
+    MAX(tr.temp_celsius) AS max_temp_celsius,
+    AVG(tr.efficiency_jth) AS avg_efficiency_jth,
+    AVG(
+      CASE
+        WHEN NULLIF(tr.tags->>'ambient_temp_c', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN (tr.tags->>'ambient_temp_c')::DOUBLE PRECISION
+        ELSE NULL
+      END
+    ) AS avg_ambient_celsius
+  FROM telemetry_readings tr
+  WHERE tr.site_id = $1
+    AND tr.ts >= $2
+    AND tr.ts < $3
+  GROUP BY 1, 2, 3, 4
+)
+SELECT
+  rr.bucket,
+  rr.rack_id,
+  COALESCE(MIN(m.miner_model), 'unknown') AS miner_model,
+  COALESCE(rp.criticality_class, 'normal_production') AS criticality_class,
+  COALESCE(SUM(rr.avg_power_watts) / 1000.0, 0) AS current_load_kw,
+  COALESCE(SUM(rr.avg_hashrate_ths), 0) AS avg_hashrate_ths,
+  COALESCE(SUM(rr.avg_power_watts), 0) AS avg_power_watts,
+  COALESCE(AVG(rr.avg_temp_celsius), 0) AS avg_temp_celsius,
+  COALESCE(MAX(rr.max_temp_celsius), 0) AS max_temp_celsius,
+  COALESCE(AVG(COALESCE(rr.avg_ambient_celsius, esp.ambient_reference_c)), esp.ambient_reference_c) AS avg_ambient_celsius,
+  COALESCE(SUM(rr.avg_power_watts) / NULLIF(SUM(rr.avg_hashrate_ths), 0), 0) AS avg_efficiency_jth,
+  COALESCE(SUM(m.nominal_hashrate_ths), 0) AS nominal_hashrate_ths,
+  COALESCE(SUM(m.nominal_power_watts), 0) AS nominal_power_watts,
+  CASE
+    WHEN rp.ramp_up_kw_per_interval > 0 THEN rp.ramp_up_kw_per_interval
+    ELSE esp.ramp_up_kw_per_interval
+  END AS ramp_up_kw_per_interval,
+  CASE
+    WHEN rp.ramp_down_kw_per_interval > 0 THEN rp.ramp_down_kw_per_interval
+    ELSE esp.ramp_down_kw_per_interval
+  END AS ramp_down_kw_per_interval,
+  (rp.safety_locked OR rp.criticality_class = 'safety_blocked') AS safety_locked
+FROM rack_readings rr
+JOIN miners m
+  ON m.miner_id = rr.miner_id
+JOIN energy_rack_profiles rp
+  ON rp.rack_id = rr.rack_id
+JOIN energy_site_profiles esp
+  ON esp.site_id = rr.site_id
+GROUP BY
+  rr.bucket,
+  rr.rack_id,
+  rp.criticality_class,
+  rp.ramp_up_kw_per_interval,
+  rp.ramp_down_kw_per_interval,
+  rp.safety_locked,
+  esp.ramp_up_kw_per_interval,
+  esp.ramp_down_kw_per_interval,
+  esp.ambient_reference_c
+ORDER BY rr.bucket, rr.rack_id
+`, siteID, start, end)
+	if err != nil {
+		return orchestrator.HistoricalReplayInput{}, fmt.Errorf("query historical replay input: %w", err)
+	}
+	defer rows.Close()
+
+	points := make([]orchestrator.HistoricalRackPoint, 0)
+	for rows.Next() {
+		var item orchestrator.HistoricalRackPoint
+		if err := rows.Scan(
+			&item.Bucket,
+			&item.RackID,
+			&item.MinerModel,
+			&item.CriticalityClass,
+			&item.CurrentLoadKW,
+			&item.AvgHashrateTHs,
+			&item.AvgPowerWatts,
+			&item.AvgTempCelsius,
+			&item.MaxTempCelsius,
+			&item.AvgAmbientCelsius,
+			&item.AvgEfficiencyJTH,
+			&item.NominalHashrateTHs,
+			&item.NominalPowerWatts,
+			&item.RampUpKWPerInterval,
+			&item.RampDownKWPerInterval,
+			&item.SafetyLocked,
+		); err != nil {
+			return orchestrator.HistoricalReplayInput{}, fmt.Errorf("scan historical replay point: %w", err)
+		}
+		points = append(points, item)
+	}
+	if err := rows.Err(); err != nil {
+		return orchestrator.HistoricalReplayInput{}, fmt.Errorf("iterate historical replay points: %w", err)
+	}
+	if len(points) == 0 {
+		return orchestrator.HistoricalReplayInput{}, pgx.ErrNoRows
+	}
+	input.Points = points
+
+	if r.relationExists(ctx, "alerts") {
+		if err := r.pool.QueryRow(ctx, `
+SELECT COUNT(*)
+FROM alerts
+WHERE site_id = $1
+  AND first_seen_at >= $2
+  AND first_seen_at < $3
+`, siteID, start, end).Scan(&input.ObservedPersistedAlerts); err != nil {
+			return orchestrator.HistoricalReplayInput{}, fmt.Errorf("count observed alerts for replay: %w", err)
+		}
+	}
+
+	return input, nil
+}
+
+func (r *PostgresRepository) relationExists(ctx context.Context, name string) bool {
+	var relationName *string
+	if err := r.pool.QueryRow(ctx, `SELECT to_regclass($1)::text`, "public."+name).Scan(&relationName); err != nil {
+		return false
+	}
+	return relationName != nil && *relationName != ""
 }

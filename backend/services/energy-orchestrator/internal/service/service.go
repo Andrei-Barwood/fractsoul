@@ -36,6 +36,12 @@ type BudgetResult struct {
 	FractsoulContext *fractsoul.ContextEnrichment `json:"fractsoul_context,omitempty"`
 }
 
+type OperationalViewResult struct {
+	SnapshotID       string                       `json:"snapshot_id,omitempty"`
+	View             orchestrator.OperationalView `json:"view"`
+	FractsoulContext *fractsoul.ContextEnrichment `json:"fractsoul_context,omitempty"`
+}
+
 type ValidateDispatchOptions struct {
 	RequestID       string
 	Source          string
@@ -51,6 +57,14 @@ type DispatchResult struct {
 	Result           orchestrator.DispatchValidationResult `json:"result"`
 	Budget           orchestrator.SiteBudget               `json:"budget"`
 	FractsoulContext *fractsoul.ContextEnrichment          `json:"fractsoul_context,omitempty"`
+}
+
+type ReplayHistoricalOptions struct {
+	RequestID string
+}
+
+type ReplayHistoricalResult struct {
+	Result orchestrator.HistoricalReplayResult `json:"result"`
 }
 
 func NewService(logger *slog.Logger, repository storage.Repository, publisher events.Publisher, fractsoulClient *fractsoul.Client) *Service {
@@ -70,17 +84,11 @@ func NewService(logger *slog.Logger, repository storage.Repository, publisher ev
 }
 
 func (s *Service) ComputeBudget(ctx context.Context, siteID string, at time.Time, options ComputeBudgetOptions) (BudgetResult, error) {
-	input, err := s.repository.LoadBudgetInput(ctx, siteID, at)
+	budget, fractsoulContext, err := s.computeBudget(ctx, siteID, at, options)
 	if err != nil {
 		return BudgetResult{}, err
 	}
 
-	if options.AmbientOverride != nil {
-		input.AmbientCelsius = *options.AmbientOverride
-	}
-
-	budget := orchestrator.ComputeSiteBudget(input)
-	fractsoulContext := s.loadContext(ctx, siteID, budget, options)
 	snapshotID := s.persistBudgetSnapshot(ctx, budget, fractsoulContext, defaultSource(options.Source, "budget_endpoint"))
 	s.publishBudgetEvents(ctx, options.RequestID, snapshotID, budget)
 
@@ -91,10 +99,38 @@ func (s *Service) ComputeBudget(ctx context.Context, siteID string, at time.Time
 	}, nil
 }
 
-func (s *Service) ValidateDispatch(ctx context.Context, siteID string, at time.Time, options ValidateDispatchOptions) (DispatchResult, error) {
+func (s *Service) GetOperationalView(ctx context.Context, siteID string, at time.Time, options ComputeBudgetOptions) (OperationalViewResult, error) {
+	budget, fractsoulContext, err := s.computeBudget(ctx, siteID, at, options)
+	if err != nil {
+		return OperationalViewResult{}, err
+	}
+
+	view := orchestrator.BuildOperationalView(budget)
+	snapshotID := s.persistBudgetSnapshot(ctx, budget, fractsoulContext, defaultSource(options.Source, "budget_endpoint"))
+	s.publishBudgetEvents(ctx, options.RequestID, snapshotID, budget)
+
+	return OperationalViewResult{
+		SnapshotID:       snapshotID,
+		View:             view,
+		FractsoulContext: fractsoulContext,
+	}, nil
+}
+
+func (s *Service) ReplayHistoricalDay(ctx context.Context, siteID string, day time.Time, _ ReplayHistoricalOptions) (ReplayHistoricalResult, error) {
+	input, err := s.repository.LoadHistoricalReplayInput(ctx, siteID, day)
+	if err != nil {
+		return ReplayHistoricalResult{}, err
+	}
+
+	return ReplayHistoricalResult{
+		Result: orchestrator.RunHistoricalReplay(input),
+	}, nil
+}
+
+func (s *Service) computeBudget(ctx context.Context, siteID string, at time.Time, options ComputeBudgetOptions) (orchestrator.SiteBudget, *fractsoul.ContextEnrichment, error) {
 	input, err := s.repository.LoadBudgetInput(ctx, siteID, at)
 	if err != nil {
-		return DispatchResult{}, err
+		return orchestrator.SiteBudget{}, nil, err
 	}
 
 	if options.AmbientOverride != nil {
@@ -102,13 +138,21 @@ func (s *Service) ValidateDispatch(ctx context.Context, siteID string, at time.T
 	}
 
 	budget := orchestrator.ComputeSiteBudget(input)
-	fractsoulContext := s.loadContext(ctx, siteID, budget, ComputeBudgetOptions{
+	fractsoulContext := s.loadContext(ctx, siteID, budget, options)
+	return budget, fractsoulContext, nil
+}
+
+func (s *Service) ValidateDispatch(ctx context.Context, siteID string, at time.Time, options ValidateDispatchOptions) (DispatchResult, error) {
+	budget, fractsoulContext, err := s.computeBudget(ctx, siteID, at, ComputeBudgetOptions{
 		RequestID:       options.RequestID,
 		Source:          options.Source,
+		AmbientOverride: options.AmbientOverride,
 		IncludeContext:  options.IncludeContext,
 		ContextOptions:  options.ContextOptions,
-		AmbientOverride: options.AmbientOverride,
 	})
+	if err != nil {
+		return DispatchResult{}, err
+	}
 
 	requestedBy := strings.TrimSpace(options.RequestedBy)
 	if requestedBy == "" {
@@ -178,17 +222,17 @@ func (s *Service) persistBudgetSnapshot(ctx context.Context, budget orchestrator
 
 func (s *Service) publishBudgetEvents(ctx context.Context, requestID, snapshotID string, budget orchestrator.SiteBudget) {
 	loadBudgetUpdated := contracts.LoadBudgetUpdatedEvent{
-		SnapshotID:           snapshotID,
-		EventID:              uuid.NewString(),
-		EventType:            "load_budget_updated",
-		OccurredAt:           time.Now().UTC(),
-		SiteID:               budget.SiteID,
-		PolicyMode:           budget.PolicyMode,
-		NominalCapacityKW:    budget.NominalCapacityKW,
-		SafeCapacityKW:       budget.SafeCapacityKW,
-		CurrentLoadKW:        budget.CurrentLoadKW,
-		AvailableCapacityKW:  budget.AvailableCapacityKW,
-		ConstraintFlags:      budget.ConstraintFlags,
+		SnapshotID:          snapshotID,
+		EventID:             uuid.NewString(),
+		EventType:           "load_budget_updated",
+		OccurredAt:          time.Now().UTC(),
+		SiteID:              budget.SiteID,
+		PolicyMode:          budget.PolicyMode,
+		NominalCapacityKW:   budget.NominalCapacityKW,
+		SafeCapacityKW:      budget.SafeCapacityKW,
+		CurrentLoadKW:       budget.CurrentLoadKW,
+		AvailableCapacityKW: budget.AvailableCapacityKW,
+		ConstraintFlags:     budget.ConstraintFlags,
 	}
 	s.publish(ctx, contracts.SubjectLoadBudgetUpdated, requestID, snapshotID, loadBudgetUpdated)
 

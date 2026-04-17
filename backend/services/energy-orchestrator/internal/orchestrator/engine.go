@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"fmt"
 	"math"
 	"sort"
 	"strings"
@@ -9,6 +10,7 @@ import (
 func ComputeSiteBudget(input BudgetInput) SiteBudget {
 	rackLoads := cloneRackLoads(input.CurrentRackLoadKW)
 	siteCurrentLoad := sumLoads(rackLoads)
+	siteRampPolicy := buildRampPolicy(input.Site)
 
 	siteAsset := CapacityAsset{
 		ID:                     input.Site.SiteID,
@@ -75,6 +77,10 @@ func ComputeSiteBudget(input BudgetInput) SiteBudget {
 	siteSafe := minPositive(layerSafe...)
 	siteReserved := maxFloat(siteEffective-siteSafe, 0)
 	siteAvailable := maxFloat(siteSafe-siteCurrentLoad, 0)
+	siteSafeDispatchable := siteAvailable
+	if siteRampPolicy.RampUpKWPerInterval > 0 {
+		siteSafeDispatchable = minPositive(siteSafeDispatchable, siteRampPolicy.RampUpKWPerInterval)
+	}
 
 	busBudgetByID := indexAssetBudgets(busBudgets)
 	feederBudgetByID := indexAssetBudgets(feederBudgets)
@@ -97,14 +103,53 @@ func ComputeSiteBudget(input BudgetInput) SiteBudget {
 		}
 		rackAssetBudget := computeAssetBudget(rackAsset, currentLoad, input.AmbientCelsius)
 		thermalHeadroom := maxFloat(rack.ThermalDensityLimitKW-currentLoad, 0)
+		criticalityClass := normalizeLoadCriticalityClass(string(rack.CriticalityClass))
+		criticalityReason := strings.TrimSpace(rack.CriticalityReason)
+		if criticalityReason == "" {
+			criticalityReason = defaultCriticalityReason(criticalityClass)
+		}
+		safetyBlocked := rack.SafetyLocked || criticalityClass == LoadClassSafetyBlocked
+		safetyReason := strings.TrimSpace(rack.SafetyLockReason)
+		if safetyBlocked && safetyReason == "" {
+			safetyReason = "rack is blocked until the safety condition is cleared"
+		}
+		rampUpLimitKW := effectiveRampUpLimit(input.Site, rack)
+		rampDownLimitKW := effectiveRampDownLimit(input.Site, rack)
+		upRampRemainingKW := rackAssetBudget.AvailableCapacityKW
+		downRampRemainingKW := currentLoad
+		if rampUpLimitKW > 0 {
+			upRampRemainingKW = rampUpLimitKW
+		}
+		if rampDownLimitKW > 0 {
+			downRampRemainingKW = minPositive(currentLoad, rampDownLimitKW)
+		}
+		if safetyBlocked {
+			upRampRemainingKW = 0
+			downRampRemainingKW = currentLoad
+		}
 
 		pathAvailabilities := []float64{rackAssetBudget.AvailableCapacityKW, siteAvailable}
-		flags := make([]string, 0, 4)
+		flags := make([]string, 0, 8)
 		if rackAssetBudget.AvailableCapacityKW <= 0 {
 			flags = append(flags, "rack_safe_capacity_exhausted")
 		}
+		if rackAssetBudget.CurrentLoadKW > rackAssetBudget.SafeCapacityKW {
+			flags = append(flags, "rack_current_load_above_safe_capacity")
+		}
 		if thermalHeadroom <= 0 {
 			flags = append(flags, "thermal_density_limit_reached")
+		}
+		if rack.MaintenanceActive {
+			flags = append(flags, "rack_maintenance_active")
+		}
+		if safetyBlocked {
+			flags = append(flags, "rack_safety_blocked")
+		}
+		if siteRampPolicy.RampUpKWPerInterval > 0 {
+			pathAvailabilities = append(pathAvailabilities, siteRampPolicy.RampUpKWPerInterval)
+		}
+		if rampUpLimitKW > 0 {
+			pathAvailabilities = append(pathAvailabilities, rampUpLimitKW)
 		}
 
 		if rack.BusID != "" {
@@ -132,12 +177,21 @@ func ComputeSiteBudget(input BudgetInput) SiteBudget {
 			}
 		}
 		pathAvailabilities = append(pathAvailabilities, thermalHeadroom)
+		safeDispatchableKW := minPositive(pathAvailabilities...)
+		if safetyBlocked {
+			safeDispatchableKW = 0
+		}
 
 		rackBudgets = append(rackBudgets, RackBudget{
 			RackID:                rack.RackID,
 			BusID:                 rack.BusID,
 			FeederID:              rack.FeederID,
 			PDUID:                 rack.PDUID,
+			CriticalityClass:      criticalityClass,
+			CriticalityRank:       criticalityRank(criticalityClass),
+			CriticalityReason:     criticalityReason,
+			SafetyBlocked:         safetyBlocked,
+			SafetyBlockReason:     safetyReason,
 			CurrentLoadKW:         currentLoad,
 			NominalCapacityKW:     rackAssetBudget.NominalCapacityKW,
 			EffectiveCapacityKW:   rackAssetBudget.EffectiveCapacityKW,
@@ -146,7 +200,11 @@ func ComputeSiteBudget(input BudgetInput) SiteBudget {
 			AvailableCapacityKW:   rackAssetBudget.AvailableCapacityKW,
 			ThermalDensityLimitKW: rack.ThermalDensityLimitKW,
 			ThermalHeadroomKW:     thermalHeadroom,
-			SafeDispatchableKW:    minPositive(pathAvailabilities...),
+			RampUpLimitKW:         rampUpLimitKW,
+			RampDownLimitKW:       rampDownLimitKW,
+			UpRampRemainingKW:     upRampRemainingKW,
+			DownRampRemainingKW:   downRampRemainingKW,
+			SafeDispatchableKW:    safeDispatchableKW,
 			ConstraintFlags:       dedupeAndSort(flags),
 		})
 	}
@@ -161,6 +219,9 @@ func ComputeSiteBudget(input BudgetInput) SiteBudget {
 	}
 	if siteCurrentLoad > siteSafe {
 		constraintFlags = append(constraintFlags, "site_current_load_above_safe_capacity")
+	}
+	if siteRampPolicy.IntervalSeconds > 0 && (siteRampPolicy.RampUpKWPerInterval > 0 || siteRampPolicy.RampDownKWPerInterval > 0) {
+		constraintFlags = append(constraintFlags, "site_ramp_policy_active")
 	}
 
 	policyMode := strings.TrimSpace(input.Site.AdvisoryMode)
@@ -180,7 +241,8 @@ func ComputeSiteBudget(input BudgetInput) SiteBudget {
 		SafeCapacityKW:      siteSafe,
 		CurrentLoadKW:       siteCurrentLoad,
 		AvailableCapacityKW: siteAvailable,
-		SafeDispatchableKW:  siteAvailable,
+		SafeDispatchableKW:  siteSafeDispatchable,
+		RampPolicy:          siteRampPolicy,
 		ConstraintFlags:     dedupeAndSort(constraintFlags),
 		Substations:         input.Substations,
 		Transformers:        transformerBudgets,
@@ -202,16 +264,83 @@ func ValidateDispatch(budget SiteBudget, requests []DispatchRequest, requestedBy
 	pduRemaining := remainingByAsset(budget.PDUs)
 	rackRemaining := make(map[string]float64, len(budget.Racks))
 	thermalRemaining := make(map[string]float64, len(budget.Racks))
+	rackCurrentLoad := make(map[string]float64, len(budget.Racks))
+	rackUpRampRemaining := make(map[string]float64, len(budget.Racks))
+	rackDownRampRemaining := make(map[string]float64, len(budget.Racks))
 	for _, rack := range budget.Racks {
 		rackRemaining[rack.RackID] = rack.AvailableCapacityKW
 		thermalRemaining[rack.RackID] = rack.ThermalHeadroomKW
+		rackCurrentLoad[rack.RackID] = rack.CurrentLoadKW
+		rackUpRampRemaining[rack.RackID] = rack.UpRampRemainingKW
+		rackDownRampRemaining[rack.RackID] = rack.DownRampRemainingKW
 	}
 	siteRemaining := budget.AvailableCapacityKW
+	siteUpRampRemaining := math.MaxFloat64
+	if budget.RampPolicy.RampUpKWPerInterval > 0 {
+		siteUpRampRemaining = budget.RampPolicy.RampUpKWPerInterval
+	}
+	siteDownRampRemaining := budget.CurrentLoadKW
+	if budget.RampPolicy.RampDownKWPerInterval > 0 {
+		siteDownRampRemaining = budget.RampPolicy.RampDownKWPerInterval
+	}
 
-	decisions := make([]DispatchDecision, 0, len(requests))
+	type scheduledRequest struct {
+		index   int
+		request DispatchRequest
+	}
+
+	queue := make([]scheduledRequest, 0, len(requests))
+	for idx, request := range requests {
+		queue = append(queue, scheduledRequest{index: idx, request: request})
+	}
+	sort.SliceStable(queue, func(i, j int) bool {
+		left := queue[i]
+		right := queue[j]
+		leftDirection := dispatchDirection(left.request.DeltaKW)
+		rightDirection := dispatchDirection(right.request.DeltaKW)
+		if leftDirection != rightDirection {
+			return leftDirection < rightDirection
+		}
+
+		leftRack, leftOK := rackByID[left.request.RackID]
+		rightRack, rightOK := rackByID[right.request.RackID]
+		if leftDirection < 0 {
+			leftPriority := 5
+			rightPriority := 5
+			if leftOK {
+				leftPriority = curtailmentPriority(leftRack.CriticalityClass)
+			}
+			if rightOK {
+				rightPriority = curtailmentPriority(rightRack.CriticalityClass)
+			}
+			if leftPriority != rightPriority {
+				return leftPriority < rightPriority
+			}
+			if math.Abs(left.request.DeltaKW) != math.Abs(right.request.DeltaKW) {
+				return math.Abs(left.request.DeltaKW) > math.Abs(right.request.DeltaKW)
+			}
+			return left.index < right.index
+		}
+
+		leftPriority := -1
+		rightPriority := -1
+		if leftOK {
+			leftPriority = criticalityRank(leftRack.CriticalityClass)
+		}
+		if rightOK {
+			rightPriority = criticalityRank(rightRack.CriticalityClass)
+		}
+		if leftPriority != rightPriority {
+			return leftPriority > rightPriority
+		}
+		return left.index < right.index
+	})
+
+	decisions := make([]DispatchDecision, len(requests))
 	allViolations := make([]ConstraintViolation, 0)
 
-	for _, request := range requests {
+	for _, scheduled := range queue {
+		request := scheduled.request
 		decision := DispatchDecision{
 			RackID:           request.RackID,
 			RequestedDeltaKW: request.DeltaKW,
@@ -230,30 +359,121 @@ func ValidateDispatch(budget SiteBudget, requests []DispatchRequest, requestedBy
 			decision.Status = "rejected"
 			decision.Violations = []ConstraintViolation{violation}
 			allViolations = append(allViolations, violation)
-			decisions = append(decisions, decision)
+			decision.Explanation = "the requested rack is not present in the current energy inventory, so the action cannot be evaluated safely."
+			decisions[scheduled.index] = decision
 			continue
 		}
 
-		if request.DeltaKW <= 0 {
-			decision.AcceptedDeltaKW = request.DeltaKW
-			decisions = append(decisions, decision)
+		if request.DeltaKW == 0 {
+			decision.Explanation = "no power delta was requested, so no operational change is required."
+			decisions[scheduled.index] = decision
 			continue
 		}
 
-		limits := make([]float64, 0, 6)
+		if request.DeltaKW < 0 {
+			requestedReductionKW := math.Abs(request.DeltaKW)
+			currentLoadKW := rackCurrentLoad[rack.RackID]
+			limits := []float64{requestedReductionKW, currentLoadKW}
+			violations := make([]ConstraintViolation, 0, 4)
+
+			if currentLoadKW < requestedReductionKW {
+				violations = append(violations, makeViolation("rack", rack.RackID, "rack_no_load_to_reduce", "requested curtailment is larger than the rack current load", currentLoadKW, currentLoadKW, request.DeltaKW, currentLoadKW))
+			}
+			if !rack.SafetyBlocked && budget.RampPolicy.RampDownKWPerInterval > 0 {
+				limits = append(limits, siteDownRampRemaining)
+				if siteDownRampRemaining < requestedReductionKW {
+					violations = append(violations, makeViolation("site", budget.SiteID, "site_ramp_down_limit", "requested curtailment would exceed the site down-ramp policy for the interval", budget.RampPolicy.RampDownKWPerInterval, budget.CurrentLoadKW-siteRemaining, request.DeltaKW, siteDownRampRemaining))
+				}
+			}
+			if !rack.SafetyBlocked && rack.RampDownLimitKW > 0 {
+				limits = append(limits, rackDownRampRemaining[rack.RackID])
+				if rackDownRampRemaining[rack.RackID] < requestedReductionKW {
+					violations = append(violations, makeViolation("rack", rack.RackID, "rack_ramp_down_limit", "requested curtailment would exceed the rack down-ramp policy for the interval", rack.RampDownLimitKW, currentLoadKW, request.DeltaKW, rackDownRampRemaining[rack.RackID]))
+				}
+			}
+
+			acceptedReductionKW := minPositive(limits...)
+			if rack.SafetyBlocked {
+				acceptedReductionKW = minPositive(requestedReductionKW, currentLoadKW)
+			}
+			if acceptedReductionKW < 0 {
+				acceptedReductionKW = 0
+			}
+			decision.AcceptedDeltaKW = -acceptedReductionKW
+
+			switch {
+			case acceptedReductionKW <= 0:
+				decision.Status = "rejected"
+			case acceptedReductionKW < requestedReductionKW:
+				decision.Status = "partial"
+			default:
+				decision.Status = "accepted"
+			}
+
+			if decision.Status != "accepted" {
+				decision.Violations = dedupeViolations(violations)
+				allViolations = append(allViolations, decision.Violations...)
+			}
+
+			rackCurrentLoad[rack.RackID] = maxFloat(rackCurrentLoad[rack.RackID]-acceptedReductionKW, 0)
+			rackRemaining[rack.RackID] += acceptedReductionKW
+			thermalRemaining[rack.RackID] += acceptedReductionKW
+			siteRemaining += acceptedReductionKW
+			if budget.RampPolicy.RampDownKWPerInterval > 0 && !rack.SafetyBlocked {
+				siteDownRampRemaining = maxFloat(siteDownRampRemaining-acceptedReductionKW, 0)
+			}
+			if rack.RampDownLimitKW > 0 && !rack.SafetyBlocked {
+				rackDownRampRemaining[rack.RackID] = maxFloat(rackDownRampRemaining[rack.RackID]-acceptedReductionKW, 0)
+			}
+			if rack.BusID != "" {
+				busRemaining[rack.BusID] += acceptedReductionKW
+			}
+			if rack.FeederID != "" {
+				feederRemaining[rack.FeederID] += acceptedReductionKW
+			}
+			if rack.PDUID != "" {
+				pduRemaining[rack.PDUID] += acceptedReductionKW
+			}
+
+			decision.Explanation = buildDispatchExplanation(rack, decision, "curtailment")
+			decisions[scheduled.index] = decision
+			continue
+		}
+
+		if rack.SafetyBlocked {
+			violation := makeViolation("rack", rack.RackID, "rack_safety_blocked", readableSafetyReason(rack), 0, rackCurrentLoad[rack.RackID], request.DeltaKW, 0)
+			decision.Status = "rejected"
+			decision.Violations = []ConstraintViolation{violation}
+			decision.Explanation = "the rack is safety-blocked, so upward dispatch is not allowed until the safety condition is cleared."
+			allViolations = append(allViolations, violation)
+			decisions[scheduled.index] = decision
+			continue
+		}
+
+		limits := []float64{request.DeltaKW, siteRemaining, rackRemaining[rack.RackID], thermalRemaining[rack.RackID]}
 		violations := make([]ConstraintViolation, 0, 6)
 
-		limits = append(limits, siteRemaining)
 		if siteRemaining < request.DeltaKW {
 			violations = append(violations, makeViolation("site", budget.SiteID, "site_capacity_exceeded", "requested dispatch would exceed site safe capacity", budget.SafeCapacityKW, budget.CurrentLoadKW, request.DeltaKW, siteRemaining))
 		}
+		if budget.RampPolicy.RampUpKWPerInterval > 0 {
+			limits = append(limits, siteUpRampRemaining)
+			if siteUpRampRemaining < request.DeltaKW {
+				violations = append(violations, makeViolation("site", budget.SiteID, "site_ramp_up_limit", "requested dispatch would exceed the site up-ramp policy for the interval", budget.RampPolicy.RampUpKWPerInterval, budget.CurrentLoadKW-siteRemaining, request.DeltaKW, siteUpRampRemaining))
+			}
+		}
+		if rack.RampUpLimitKW > 0 {
+			limits = append(limits, rackUpRampRemaining[rack.RackID])
+			if rackUpRampRemaining[rack.RackID] < request.DeltaKW {
+				violations = append(violations, makeViolation("rack", rack.RackID, "rack_ramp_up_limit", "requested dispatch would exceed the rack up-ramp policy for the interval", rack.RampUpLimitKW, rackCurrentLoad[rack.RackID], request.DeltaKW, rackUpRampRemaining[rack.RackID]))
+			}
+		}
 
-		limits = append(limits, rackRemaining[rack.RackID], thermalRemaining[rack.RackID])
 		if rackRemaining[rack.RackID] < request.DeltaKW {
-			violations = append(violations, makeViolation("rack", rack.RackID, "rack_safe_capacity_exhausted", "rack safe capacity is exhausted after reserve", rack.SafeCapacityKW, rack.CurrentLoadKW, request.DeltaKW, rackRemaining[rack.RackID]))
+			violations = append(violations, makeViolation("rack", rack.RackID, "rack_safe_capacity_exhausted", "rack safe capacity is exhausted after reserve", rack.SafeCapacityKW, rackCurrentLoad[rack.RackID], request.DeltaKW, rackRemaining[rack.RackID]))
 		}
 		if thermalRemaining[rack.RackID] < request.DeltaKW {
-			violations = append(violations, makeViolation("rack", rack.RackID, "thermal_density_exceeded", "requested dispatch would exceed thermal density limit", rack.ThermalDensityLimitKW, rack.CurrentLoadKW, request.DeltaKW, thermalRemaining[rack.RackID]))
+			violations = append(violations, makeViolation("rack", rack.RackID, "thermal_density_exceeded", "requested dispatch would exceed thermal density limit", rack.ThermalDensityLimitKW, rackCurrentLoad[rack.RackID], request.DeltaKW, thermalRemaining[rack.RackID]))
 		}
 
 		if rack.BusID != "" {
@@ -302,8 +522,15 @@ func ValidateDispatch(budget SiteBudget, requests []DispatchRequest, requestedBy
 		}
 
 		siteRemaining = maxFloat(siteRemaining-accepted, 0)
+		if budget.RampPolicy.RampUpKWPerInterval > 0 {
+			siteUpRampRemaining = maxFloat(siteUpRampRemaining-accepted, 0)
+		}
+		rackCurrentLoad[rack.RackID] += accepted
 		rackRemaining[rack.RackID] = maxFloat(rackRemaining[rack.RackID]-accepted, 0)
 		thermalRemaining[rack.RackID] = maxFloat(thermalRemaining[rack.RackID]-accepted, 0)
+		if rack.RampUpLimitKW > 0 {
+			rackUpRampRemaining[rack.RackID] = maxFloat(rackUpRampRemaining[rack.RackID]-accepted, 0)
+		}
 		if rack.BusID != "" {
 			busRemaining[rack.BusID] = maxFloat(busRemaining[rack.BusID]-accepted, 0)
 		}
@@ -314,7 +541,8 @@ func ValidateDispatch(budget SiteBudget, requests []DispatchRequest, requestedBy
 			pduRemaining[rack.PDUID] = maxFloat(pduRemaining[rack.PDUID]-accepted, 0)
 		}
 
-		decisions = append(decisions, decision)
+		decision.Explanation = buildDispatchExplanation(rack, decision, "dispatch")
+		decisions[scheduled.index] = decision
 	}
 
 	summaryStatus := "accepted"
@@ -344,6 +572,80 @@ func ValidateDispatch(budget SiteBudget, requests []DispatchRequest, requestedBy
 		Decisions:     decisions,
 		Violations:    dedupeViolations(allViolations),
 	}
+}
+
+func buildRampPolicy(site SiteProfile) RampPolicy {
+	intervalSeconds := site.RampIntervalSeconds
+	if intervalSeconds <= 0 && (site.RampUpKWPerInterval > 0 || site.RampDownKWPerInterval > 0) {
+		intervalSeconds = 300
+	}
+	return RampPolicy{
+		IntervalSeconds:       intervalSeconds,
+		RampUpKWPerInterval:   maxFloat(site.RampUpKWPerInterval, 0),
+		RampDownKWPerInterval: maxFloat(site.RampDownKWPerInterval, 0),
+	}
+}
+
+func effectiveRampUpLimit(site SiteProfile, rack RackProfile) float64 {
+	if rack.RampUpKWPerInterval > 0 {
+		return rack.RampUpKWPerInterval
+	}
+	return maxFloat(site.RampUpKWPerInterval, 0)
+}
+
+func effectiveRampDownLimit(site SiteProfile, rack RackProfile) float64 {
+	if rack.RampDownKWPerInterval > 0 {
+		return rack.RampDownKWPerInterval
+	}
+	return maxFloat(site.RampDownKWPerInterval, 0)
+}
+
+func defaultCriticalityReason(class LoadCriticalityClass) string {
+	switch normalizeLoadCriticalityClass(string(class)) {
+	case LoadClassPreferredProduction:
+		return "rack is assigned to preferred production"
+	case LoadClassSacrificableLoad:
+		return "rack is designated as sacrificial load for curtailment first"
+	case LoadClassSafetyBlocked:
+		return "rack is blocked by safety policy"
+	default:
+		return "rack participates in normal production"
+	}
+}
+
+func dispatchDirection(deltaKW float64) int {
+	switch {
+	case deltaKW < 0:
+		return -1
+	case deltaKW > 0:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func buildDispatchExplanation(rack RackBudget, decision DispatchDecision, action string) string {
+	switch decision.Status {
+	case "accepted":
+		return fmtDispatchAccepted(rack, decision, action)
+	case "partial":
+		if len(decision.Violations) == 0 {
+			return fmtDispatchAccepted(rack, decision, action)
+		}
+		return "the request was partially accepted because one or more electrical, thermal or ramp limits became active before the full delta could be applied."
+	default:
+		if len(decision.Violations) == 0 {
+			return "the request was rejected because it is not safe to execute in the current operating posture."
+		}
+		return decision.Violations[0].Message
+	}
+}
+
+func fmtDispatchAccepted(rack RackBudget, decision DispatchDecision, action string) string {
+	if action == "curtailment" {
+		return fmt.Sprintf("curtailment of %.2f kW on rack %s fits the current ramp and safety posture.", math.Abs(decision.AcceptedDeltaKW), rack.RackID)
+	}
+	return fmt.Sprintf("dispatch increase of %.2f kW on rack %s fits the current electrical headroom, thermal envelope and ramp policy.", decision.AcceptedDeltaKW, rack.RackID)
 }
 
 func buildAssetBudgets(assets []CapacityAsset, loads map[string]float64, ambient float64) []AssetBudget {

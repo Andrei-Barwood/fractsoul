@@ -34,6 +34,12 @@ func NewRouter(logger *slog.Logger, appService *service.Service, authConfig APIK
 		readGroup.Use(RequireRoles(logger, RoleViewer, RoleOperator, RoleAdmin))
 		{
 			readGroup.GET("/energy/sites/:site_id/budget", energyHandler.SiteBudget)
+			readGroup.GET("/energy/sites/:site_id/operations", energyHandler.SiteOperationalView)
+			readGroup.GET("/energy/sites/:site_id/constraints/active", energyHandler.ActiveConstraints)
+			readGroup.GET("/energy/sites/:site_id/recommendations/pending", energyHandler.PendingRecommendations)
+			readGroup.GET("/energy/sites/:site_id/actions/blocked", energyHandler.BlockedActions)
+			readGroup.GET("/energy/sites/:site_id/explanations", energyHandler.DecisionExplanations)
+			readGroup.GET("/energy/sites/:site_id/replay/historical", energyHandler.HistoricalReplay)
 		}
 
 		writeGroup := v1.Group("")

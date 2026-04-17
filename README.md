@@ -8,7 +8,7 @@ Monorepo base para el MVP de operacion de granjas de Bitcoin mining.
 - `backend/services/energy-orchestrator`: servicio de presupuesto de potencia, snapshots y validacion de dispatch (Go + Gin + Postgres + NATS).
 - `frontend/apps/dashboard`: placeholder de UI operativa.
 - `infra/docker`: recursos de contenedores para desarrollo local.
-- `docs/planning`: documentos de ejecucion D1-D100 y ADRs.
+- `docs/planning`: documentos de ejecucion D1-D104 y ADRs.
 - `docs/operations`: evidencias operativas (backup/restore, resiliencia, benchmark, demo final).
 - `docs/contracts`: contratos JSON/schema.
 - `docs/engineering`: convenciones tecnicas.
@@ -46,6 +46,8 @@ Budget operativo inicial del `energy-orchestrator`:
 
 ```bash
 curl "http://localhost:8081/v1/energy/sites/site-cl-01/budget?include_context=true"
+curl "http://localhost:8081/v1/energy/sites/site-cl-02/operations?include_context=true"
+curl "http://localhost:8081/v1/energy/sites/site-cl-02/replay/historical?day=$(date -u +%F)"
 ```
 
 3. Probar endpoint de ingesta:
@@ -143,6 +145,12 @@ curl "http://localhost:8080/v1/anomalies/miners/asic-000001/analyze?resolution=m
 
 ```bash
 curl "http://localhost:8081/v1/energy/sites/site-cl-01/budget?include_context=true"
+curl "http://localhost:8081/v1/energy/sites/site-cl-02/operations?include_context=true"
+curl "http://localhost:8081/v1/energy/sites/site-cl-02/constraints/active"
+curl "http://localhost:8081/v1/energy/sites/site-cl-02/recommendations/pending"
+curl "http://localhost:8081/v1/energy/sites/site-cl-02/actions/blocked"
+curl "http://localhost:8081/v1/energy/sites/site-cl-02/explanations"
+curl "http://localhost:8081/v1/energy/sites/site-cl-02/replay/historical?day=$(date -u +%F)"
 curl -X POST "http://localhost:8081/v1/energy/sites/site-cl-01/dispatch/validate" \
   -H 'Content-Type: application/json' \
   -d @docs/contracts/energy_dispatch_validate_request_v1.example.json
@@ -174,3 +182,11 @@ Contratos base del `energy-orchestrator` en:
 - [docs/contracts/energy_load_budget_response_v1.example.json](docs/contracts/energy_load_budget_response_v1.example.json)
 - [docs/contracts/energy_dispatch_validate_request_v1.example.json](docs/contracts/energy_dispatch_validate_request_v1.example.json)
 - [docs/contracts/energy_dispatch_validate_response_v1.example.json](docs/contracts/energy_dispatch_validate_response_v1.example.json)
+- [docs/contracts/energy_operations_response_v1.example.json](docs/contracts/energy_operations_response_v1.example.json)
+- [docs/contracts/energy_replay_historical_response_v1.example.json](docs/contracts/energy_replay_historical_response_v1.example.json)
+
+Planning reciente del `energy-orchestrator`:
+- [docs/planning/D101_energy_orchestrator_priorizacion_carga.md](docs/planning/D101_energy_orchestrator_priorizacion_carga.md)
+- [docs/planning/D102_energy_orchestrator_rampas_suaves.md](docs/planning/D102_energy_orchestrator_rampas_suaves.md)
+- [docs/planning/D103_energy_orchestrator_replay_historico.md](docs/planning/D103_energy_orchestrator_replay_historico.md)
+- [docs/planning/D104_energy_orchestrator_endpoints_operativos.md](docs/planning/D104_energy_orchestrator_endpoints_operativos.md)

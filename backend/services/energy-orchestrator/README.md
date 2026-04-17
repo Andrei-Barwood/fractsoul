@@ -47,6 +47,8 @@ Variables:
 - `ENERGY_CONTEXT_RACK_LIMIT` (default `3`)
 - `ENERGY_CONTEXT_WINDOW_MINUTES` (default `60`)
 - `E2E_SKIP_BUILD` (solo para `scripts/e2e_energy_orchestrator.sh`)
+- `ENERGY_OPERATIONAL_SITE_ID` (solo para `scripts/e2e_energy_orchestrator.sh`)
+- `ENERGY_REPLAY_DAY` (solo para `scripts/e2e_energy_orchestrator.sh`)
 
 Para secretos sensibles se soporta `<ENV>_FILE`.
 
@@ -55,12 +57,24 @@ Para secretos sensibles se soporta `<ENV>_FILE`.
 - `GET /healthz`
 - `GET /metrics`
 - `GET /v1/energy/sites/:site_id/budget`
+- `GET /v1/energy/sites/:site_id/operations`
+- `GET /v1/energy/sites/:site_id/constraints/active`
+- `GET /v1/energy/sites/:site_id/recommendations/pending`
+- `GET /v1/energy/sites/:site_id/actions/blocked`
+- `GET /v1/energy/sites/:site_id/explanations`
+- `GET /v1/energy/sites/:site_id/replay/historical?day=YYYY-MM-DD`
 - `POST /v1/energy/sites/:site_id/dispatch/validate`
 
 Ejemplos:
 
 ```bash
 curl "http://localhost:8081/v1/energy/sites/site-cl-01/budget?include_context=true"
+curl "http://localhost:8081/v1/energy/sites/site-cl-02/operations?include_context=true"
+curl "http://localhost:8081/v1/energy/sites/site-cl-02/constraints/active"
+curl "http://localhost:8081/v1/energy/sites/site-cl-02/recommendations/pending"
+curl "http://localhost:8081/v1/energy/sites/site-cl-02/actions/blocked"
+curl "http://localhost:8081/v1/energy/sites/site-cl-02/explanations"
+curl "http://localhost:8081/v1/energy/sites/site-cl-02/replay/historical?day=$(date -u +%F)"
 curl "http://localhost:8081/v1/energy/sites/site-cl-01/budget?ambient_celsius=31.5&context_rack_limit=2&context_window_minutes=120"
 curl -X POST "http://localhost:8081/v1/energy/sites/site-cl-01/dispatch/validate" \
   -H "Content-Type: application/json" \
@@ -69,7 +83,7 @@ curl -X POST "http://localhost:8081/v1/energy/sites/site-cl-01/dispatch/validate
 
 RBAC cuando `API_RBAC_ENABLED=true`:
 
-- `viewer`: lectura de presupuesto.
+- `viewer`: lectura de presupuesto, operaciones, restricciones, recomendaciones, bloqueos, explicaciones y replay.
 - `operator`: lectura + validacion de dispatch.
 - `admin`: igual que `operator`.
 

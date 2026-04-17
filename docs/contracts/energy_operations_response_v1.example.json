@@ -1,0 +1,80 @@
+{
+  "request_id": "03efea34-6ad8-4d7d-b33f-c4384d6cdaef",
+  "snapshot_id": "snapshot-energy-20260417-171000-site-cl-02",
+  "view": {
+    "site_id": "site-cl-02",
+    "policy_mode": "advisory-first",
+    "calculated_at": "2026-04-17T17:10:00Z",
+    "budget": {
+      "site_id": "site-cl-02",
+      "policy_mode": "advisory-first",
+      "calculated_at": "2026-04-17T17:10:00Z",
+      "safe_capacity_kw": 930,
+      "current_load_kw": 828.4,
+      "available_capacity_kw": 101.6,
+      "safe_dispatchable_kw": 20,
+      "ramp_policy": {
+        "interval_seconds": 300,
+        "ramp_up_kw_per_interval": 20,
+        "ramp_down_kw_per_interval": 35
+      }
+    },
+    "active_constraints": [
+      {
+        "scope": "site",
+        "scope_id": "site-cl-02",
+        "severity": "info",
+        "code": "site_ramp_policy_active",
+        "summary": "site ramp policy is active",
+        "explanation": "dispatch changes are smoothed over 300 seconds with up-ramp 20.00 kW and down-ramp 35.00 kW per interval"
+      },
+      {
+        "scope": "rack",
+        "scope_id": "rack-cl-02-03",
+        "severity": "critical",
+        "code": "rack_safety_blocked",
+        "summary": "rack is blocked by safety policy",
+        "explanation": "Isolation locked after repeated thermal trips in the aisle.",
+        "current_kw": 77.2
+      }
+    ],
+    "pending_recommendations": [
+      {
+        "rack_id": "rack-cl-02-03",
+        "action": "isolate",
+        "criticality_class": "safety_blocked",
+        "priority_rank": 1,
+        "requested_delta_kw": -77.2,
+        "recommended_delta_kw": -35,
+        "reason": "safety block active on rack",
+        "explanation": "rack rack-cl-02-03 is safety-blocked, so the safest advisory action is to reduce 35.00 kW as quickly as allowed.",
+        "constraint_codes": [
+          "rack_safety_blocked"
+        ]
+      }
+    ],
+    "blocked_actions": [
+      {
+        "rack_id": "rack-cl-02-03",
+        "attempted_action": "dispatch_increase",
+        "criticality_class": "safety_blocked",
+        "code": "rack_safety_blocked",
+        "reason": "Isolation locked after repeated thermal trips in the aisle.",
+        "explanation": "the rack is blocked by safety policy, so upward dispatch is not allowed until the safety condition is cleared."
+      }
+    ],
+    "explanations": [
+      {
+        "scope": "site",
+        "scope_id": "site-cl-02",
+        "severity": "info",
+        "title": "Site operating posture",
+        "explanation": "site site-cl-02 is running at 828.40 kW over a safe ceiling of 930.00 kW, with 20.00 kW still safely dispatchable and ramp policy 20.00/35.00 kW per 300s."
+      }
+    ]
+  },
+  "fractsoul_context": {
+    "source": "fractsoul-ingest-api",
+    "window_minutes": 60
+  }
+}

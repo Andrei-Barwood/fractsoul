@@ -8,22 +8,22 @@ import (
 )
 
 type BudgetSnapshotCreateInput struct {
-	SiteID               string
-	Source               string
-	PolicyMode           string
-	CalculatedAt         time.Time
-	TelemetryObservedAt  *time.Time
-	AmbientCelsius       float64
-	NominalCapacityKW    float64
-	EffectiveCapacityKW  float64
-	ReservedCapacityKW   float64
-	SafeCapacityKW       float64
-	CurrentLoadKW        float64
-	AvailableCapacityKW  float64
-	SafeDispatchableKW   float64
-	ConstraintFlags      []string
-	SnapshotPayload      any
-	UpstreamContext      any
+	SiteID              string
+	Source              string
+	PolicyMode          string
+	CalculatedAt        time.Time
+	TelemetryObservedAt *time.Time
+	AmbientCelsius      float64
+	NominalCapacityKW   float64
+	EffectiveCapacityKW float64
+	ReservedCapacityKW  float64
+	SafeCapacityKW      float64
+	CurrentLoadKW       float64
+	AvailableCapacityKW float64
+	SafeDispatchableKW  float64
+	ConstraintFlags     []string
+	SnapshotPayload     any
+	UpstreamContext     any
 }
 
 type BudgetSnapshot struct {
@@ -36,6 +36,7 @@ type BudgetSnapshot struct {
 
 type Repository interface {
 	LoadBudgetInput(ctx context.Context, siteID string, at time.Time) (orchestrator.BudgetInput, error)
+	LoadHistoricalReplayInput(ctx context.Context, siteID string, day time.Time) (orchestrator.HistoricalReplayInput, error)
 	CreateBudgetSnapshot(ctx context.Context, input BudgetSnapshotCreateInput) (BudgetSnapshot, error)
 	Close()
 }
