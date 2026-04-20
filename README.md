@@ -2,6 +2,18 @@
 
 Monorepo base para el MVP de operacion de granjas de Bitcoin mining.
 
+## Producto
+
+### Fractsoul - Energy Orchestrator
+
+`Fractsoul - Energy Orchestrator` es ahora una de las piezas centrales del repo: un producto para operar campus mineros con claridad, disciplina electrica y una interfaz tranquila.
+
+Piensa la granja como una geometria viva y ordenada: `site`, `substation`, `transformer`, `bus`, `feeder`, `PDU`, `rack`. Cada capa tiene su limite, su margen y su forma. El orquestador observa esa figura completa y propone decisiones serenas antes de cualquier movimiento brusco.
+
+Su enfoque es `advisory-first`: primero comprender, luego recomendar, luego gobernar. Presupuesto de potencia, headroom seguro, rampas suaves, riesgo a cuatro horas, piloto sombra, aprobacion dual y trazabilidad completa. Menos ruido. Mas forma. Mas centro.
+
+Es un producto interesante para operaciones que quieren algo mas que telemetria: una superficie de decision energetica con minimalismo digital, sobriedad operacional y una logica que busca equilibrio, como si cada feeder y cada rack fueran lineas dentro de un mandala tecnico bien trazado.
+
 ## Estructura
 
 - `backend/services/ingest-api`: servicio de ingesta + lectura de telemetria (Go + Gin + NATS + Postgres).
