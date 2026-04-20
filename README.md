@@ -14,6 +14,9 @@ Su enfoque es `advisory-first`: primero comprender, luego recomendar, luego gobe
 
 Es un producto interesante para operaciones que quieren algo mas que telemetria: una superficie de decision energetica con minimalismo digital, sobriedad operacional y una logica que busca equilibrio, como si cada feeder y cada rack fueran lineas dentro de un mandala tecnico bien trazado.
 
+Version comercial honesta:
+- [Fractsoul - Energy Orchestrator](./docs/marketing/fractsoul_energy_orchestrator_commercial.md)
+
 ## Estructura
 
 - `backend/services/ingest-api`: servicio de ingesta + lectura de telemetria (Go + Gin + NATS + Postgres).
@@ -24,6 +27,7 @@ Es un producto interesante para operaciones que quieren algo mas que telemetria:
 - `docs/operations`: evidencias operativas (backup/restore, resiliencia, benchmark, demo final).
 - `docs/contracts`: contratos JSON/schema.
 - `docs/engineering`: convenciones tecnicas.
+- `docs/marketing`: material comercial y narrativa de producto.
 
 ## Quickstart local
 
