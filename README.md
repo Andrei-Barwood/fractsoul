@@ -48,6 +48,7 @@ Budget operativo inicial del `energy-orchestrator`:
 curl "http://localhost:8081/v1/energy/sites/site-cl-01/budget?include_context=true"
 curl "http://localhost:8081/v1/energy/sites/site-cl-02/operations?include_context=true"
 curl "http://localhost:8081/v1/energy/sites/site-cl-02/replay/historical?day=$(date -u +%F)"
+open http://localhost:8081/dashboard/energy/
 ```
 
 3. Probar endpoint de ingesta:
@@ -144,16 +145,22 @@ curl "http://localhost:8080/v1/anomalies/miners/asic-000001/analyze?resolution=m
 17. Validar presupuesto, snapshots y dispatch energetico inicial (S4 bootstrap):
 
 ```bash
+curl "http://localhost:8081/v1/energy/overview"
 curl "http://localhost:8081/v1/energy/sites/site-cl-01/budget?include_context=true"
 curl "http://localhost:8081/v1/energy/sites/site-cl-02/operations?include_context=true"
 curl "http://localhost:8081/v1/energy/sites/site-cl-02/constraints/active"
 curl "http://localhost:8081/v1/energy/sites/site-cl-02/recommendations/pending"
+curl "http://localhost:8081/v1/energy/sites/site-cl-02/recommendations/reviews"
 curl "http://localhost:8081/v1/energy/sites/site-cl-02/actions/blocked"
 curl "http://localhost:8081/v1/energy/sites/site-cl-02/explanations"
 curl "http://localhost:8081/v1/energy/sites/site-cl-02/replay/historical?day=$(date -u +%F)"
+curl "http://localhost:8081/v1/energy/sites/site-cl-02/pilot/shadow?day=$(date -u +%F)"
 curl -X POST "http://localhost:8081/v1/energy/sites/site-cl-01/dispatch/validate" \
   -H 'Content-Type: application/json' \
   -d @docs/contracts/energy_dispatch_validate_request_v1.example.json
+curl -X POST "http://localhost:8081/v1/energy/sites/site-cl-02/recommendations/reviews" \
+  -H 'Content-Type: application/json' \
+  -d @docs/contracts/energy_recommendation_review_request_v1.example.json
 ```
 
 18. Ejecutar la prueba E2E completa del `energy-orchestrator` con un solo comando:
@@ -184,9 +191,18 @@ Contratos base del `energy-orchestrator` en:
 - [docs/contracts/energy_dispatch_validate_response_v1.example.json](docs/contracts/energy_dispatch_validate_response_v1.example.json)
 - [docs/contracts/energy_operations_response_v1.example.json](docs/contracts/energy_operations_response_v1.example.json)
 - [docs/contracts/energy_replay_historical_response_v1.example.json](docs/contracts/energy_replay_historical_response_v1.example.json)
+- [docs/contracts/energy_campus_overview_response_v1.example.json](docs/contracts/energy_campus_overview_response_v1.example.json)
+- [docs/contracts/energy_shadow_pilot_response_v1.example.json](docs/contracts/energy_shadow_pilot_response_v1.example.json)
+- [docs/contracts/energy_recommendation_review_request_v1.example.json](docs/contracts/energy_recommendation_review_request_v1.example.json)
+- [docs/contracts/energy_recommendation_review_response_v1.example.json](docs/contracts/energy_recommendation_review_response_v1.example.json)
 
 Planning reciente del `energy-orchestrator`:
 - [docs/planning/D101_energy_orchestrator_priorizacion_carga.md](docs/planning/D101_energy_orchestrator_priorizacion_carga.md)
 - [docs/planning/D102_energy_orchestrator_rampas_suaves.md](docs/planning/D102_energy_orchestrator_rampas_suaves.md)
 - [docs/planning/D103_energy_orchestrator_replay_historico.md](docs/planning/D103_energy_orchestrator_replay_historico.md)
 - [docs/planning/D104_energy_orchestrator_endpoints_operativos.md](docs/planning/D104_energy_orchestrator_endpoints_operativos.md)
+- [docs/planning/D105_energy_orchestrator_dashboard_web.md](docs/planning/D105_energy_orchestrator_dashboard_web.md)
+- [docs/planning/D106_energy_orchestrator_auth_rbac_gobernanza.md](docs/planning/D106_energy_orchestrator_auth_rbac_gobernanza.md)
+- [docs/planning/D107_energy_orchestrator_pruebas_operativas.md](docs/planning/D107_energy_orchestrator_pruebas_operativas.md)
+- [docs/planning/D108_energy_orchestrator_piloto_sombra.md](docs/planning/D108_energy_orchestrator_piloto_sombra.md)
+- [docs/planning/D109_energy_orchestrator_operacion_supervisada.md](docs/planning/D109_energy_orchestrator_operacion_supervisada.md)

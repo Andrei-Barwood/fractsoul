@@ -62,6 +62,9 @@ services:
       API_KEYS: "${API_KEYS:-local-dev-key}"
       API_DEFAULT_ROLE: "${API_DEFAULT_ROLE:-admin}"
       API_KEY_ROLES: "${API_KEY_ROLES:-local-dev-key:admin}"
+      API_KEY_PRINCIPALS: "${API_KEY_PRINCIPALS:-local-dev-key:local-admin}"
+      API_KEY_SITE_SCOPES: "${API_KEY_SITE_SCOPES:-local-dev-key:*}"
+      API_KEY_RACK_SCOPES: "${API_KEY_RACK_SCOPES:-local-dev-key:*}"
       DATABASE_URL: postgres://postgres:postgres@timescaledb:5432/mining?sslmode=disable
       ENERGY_EVENTS_ENABLED: "true"
       NATS_URL: nats://nats:4222

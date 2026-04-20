@@ -208,10 +208,10 @@ print(f"{payload['snapshot_id']}|{budget['safe_capacity_kw']}|{budget['available
 PY
 )
 
-log_step "5/8" "Calling operational view and day 10 read endpoints"
+log_step "5/8" "Calling operational view, campus overview and read endpoints"
 OPERATIONS_FILE="${TMP_DIR}/operations.json"
 curl_get "${ENERGY_API_URL}/v1/energy/sites/${OPERATIONAL_SITE_ID}/operations?include_context=true" > "${OPERATIONS_FILE}"
-IFS='|' read -r OPERATIONS_SNAPSHOT_ID OPERATIONS_CONSTRAINTS OPERATIONS_RECOMMENDATIONS OPERATIONS_BLOCKED OPERATIONS_EXPLANATIONS < <(
+IFS='|' read -r OPERATIONS_SNAPSHOT_ID OPERATIONS_CONSTRAINTS OPERATIONS_RECOMMENDATIONS OPERATIONS_BLOCKED OPERATIONS_EXPLANATIONS REVIEW_SNAPSHOT_ID REVIEW_RECOMMENDATION_ID REVIEW_RACK_ID REVIEW_ACTION REVIEW_CRITICALITY REVIEW_REQUESTED_DELTA REVIEW_RECOMMENDED_DELTA REVIEW_REASON < <(
   python3 - "${OPERATIONS_FILE}" "${OPERATIONAL_SITE_ID}" <<'PY'
 import json
 import sys
@@ -230,15 +230,32 @@ assert isinstance(view.get("blocked_actions") or [], list), "operations endpoint
 assert isinstance(view.get("explanations") or [], list), "operations endpoint missing explanations list"
 assert context.get("source") == "fractsoul-ingest-api", "operations endpoint missing fractsoul context"
 
+recommendations = view.get("pending_recommendations") or []
+selected = next((item for item in recommendations if item.get("action") == "isolate"), recommendations[0] if recommendations else None)
+assert selected, "operations endpoint should return at least one pending recommendation for governance validation"
+
 print(
     f"{payload['snapshot_id']}|"
     f"{len(view.get('active_constraints') or [])}|"
     f"{len(view.get('pending_recommendations') or [])}|"
     f"{len(view.get('blocked_actions') or [])}|"
-    f"{len(view.get('explanations') or [])}"
+    f"{len(view.get('explanations') or [])}|"
+    f"{payload['snapshot_id']}|"
+    f"{selected.get('recommendation_id', '')}|"
+    f"{selected.get('rack_id', '')}|"
+    f"{selected.get('action', '')}|"
+    f"{selected.get('criticality_class', '')}|"
+    f"{selected.get('requested_delta_kw', 0)}|"
+    f"{selected.get('recommended_delta_kw', 0)}|"
+    f"{selected.get('reason', '')}"
 )
 PY
 )
+
+CAMPUS_FILE="${TMP_DIR}/campus_overview.json"
+curl_get "${ENERGY_API_URL}/v1/energy/overview" > "${CAMPUS_FILE}"
+DASHBOARD_FILE="${TMP_DIR}/dashboard_energy.html"
+curl -fsS "${ENERGY_API_URL}/dashboard/energy/" > "${DASHBOARD_FILE}"
 
 CONSTRAINTS_FILE="${TMP_DIR}/constraints.json"
 curl_get "${ENERGY_API_URL}/v1/energy/sites/${OPERATIONAL_SITE_ID}/constraints/active" > "${CONSTRAINTS_FILE}"
@@ -290,6 +307,94 @@ print(
     f"{len(decision_explanations)}|"
     f"{len(scenarios)}|"
     f"{replay_result.get('observed_persisted_alerts', 0)}"
+)
+PY
+)
+
+SHADOW_FILE="${TMP_DIR}/shadow.json"
+curl_get "${ENERGY_API_URL}/v1/energy/sites/${OPERATIONAL_SITE_ID}/pilot/shadow?day=${REPLAY_DAY}" > "${SHADOW_FILE}"
+IFS='|' read -r CAMPUS_SITE_COUNT CAMPUS_FIRST_SITE SHADOW_EVALUATED SHADOW_BLOCKED SHADOW_GAPS DASHBOARD_TITLE_OK < <(
+  python3 - "${CAMPUS_FILE}" "${SHADOW_FILE}" "${DASHBOARD_FILE}" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as handle:
+    campus = json.load(handle)
+with open(sys.argv[2], "r", encoding="utf-8") as handle:
+    shadow = json.load(handle)
+with open(sys.argv[3], "r", encoding="utf-8") as handle:
+    dashboard_html = handle.read()
+
+overview = campus.get("overview") or {}
+sites = overview.get("sites") or []
+shadow_result = shadow.get("result") or {}
+
+assert len(sites) >= 1, "campus overview should return at least one visible site"
+assert isinstance(shadow_result.get("summary") or [], list), "shadow pilot must return summary lines"
+assert shadow_result.get("recommendations_evaluated", 0) >= 1, "shadow pilot should evaluate at least one recommendation"
+assert "Console Operativa de Campus" in dashboard_html, "dashboard HTML should expose the energy console title"
+
+print(
+    f"{len(sites)}|"
+    f"{sites[0].get('site_id', '')}|"
+    f"{shadow_result.get('recommendations_evaluated', 0)}|"
+    f"{shadow_result.get('decisions_blocked', 0)}|"
+    f"{shadow_result.get('missing_data_count', 0)}|"
+    f"yes"
+)
+PY
+)
+
+REVIEW_REQUEST_FILE="${TMP_DIR}/review_request.json"
+REVIEW_REQUEST_UNIQUE_ID="${REVIEW_RECOMMENDATION_ID}-e2e-$(date +%s)"
+cat > "${REVIEW_REQUEST_FILE}" <<EOF
+{
+  "snapshot_id": "${REVIEW_SNAPSHOT_ID}",
+  "recommendation_id": "${REVIEW_REQUEST_UNIQUE_ID}",
+  "rack_id": "${REVIEW_RACK_ID}",
+  "action": "${REVIEW_ACTION}",
+  "criticality_class": "${REVIEW_CRITICALITY}",
+  "requested_delta_kw": ${REVIEW_REQUESTED_DELTA},
+  "recommended_delta_kw": ${REVIEW_RECOMMENDED_DELTA},
+  "reason": "${REVIEW_REASON}",
+  "decision": "approve",
+  "comment": "first approval created by automated e2e validation"
+}
+EOF
+
+REVIEW_POST_FILE="${TMP_DIR}/review_post.json"
+curl_json \
+  "POST" \
+  "${ENERGY_API_URL}/v1/energy/sites/${OPERATIONAL_SITE_ID}/recommendations/reviews" \
+  "$(cat "${REVIEW_REQUEST_FILE}")" \
+  > "${REVIEW_POST_FILE}"
+REVIEW_LIST_FILE="${TMP_DIR}/review_list.json"
+curl_get "${ENERGY_API_URL}/v1/energy/sites/${OPERATIONAL_SITE_ID}/recommendations/reviews" > "${REVIEW_LIST_FILE}"
+IFS='|' read -r REVIEW_STATUS REVIEW_EVENT_TYPE REVIEW_LIST_COUNT REVIEW_EVENT_COUNT < <(
+  python3 - "${REVIEW_POST_FILE}" "${REVIEW_LIST_FILE}" "${REVIEW_REQUEST_UNIQUE_ID}" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as handle:
+    posted = json.load(handle)
+with open(sys.argv[2], "r", encoding="utf-8") as handle:
+    reviews = json.load(handle)
+
+review = posted.get("review") or {}
+event = posted.get("event") or {}
+items = reviews.get("items") or []
+target = next((item for item in items if item.get("recommendation_id") == sys.argv[3]), None)
+
+assert review.get("status") == "pending_second_approval", "sensitive review should remain pending second approval"
+assert event.get("event_type") == "awaiting_second_approval", "first review event should request a second approver"
+assert target is not None, "review list should include the posted recommendation review"
+assert len(target.get("events") or []) >= 1, "review timeline should include at least one event"
+
+print(
+    f"{review.get('status', '')}|"
+    f"{event.get('event_type', '')}|"
+    f"{len(items)}|"
+    f"{len(target.get('events') or [])}"
 )
 PY
 )
@@ -396,8 +501,11 @@ fi
 log_step "8/8" "Validation summary"
 echo "Budget snapshot:    ${BUDGET_SNAPSHOT_ID} (safe=${BUDGET_SAFE_KW} kW, available=${BUDGET_AVAILABLE_KW} kW)"
 echo "Operations view:    ${OPERATIONS_SNAPSHOT_ID} (constraints=${OPERATIONS_CONSTRAINTS}, recommendations=${OPERATIONS_RECOMMENDATIONS}, blocked=${OPERATIONS_BLOCKED}, explanations=${OPERATIONS_EXPLANATIONS})"
+echo "Campus overview:    sites=${CAMPUS_SITE_COUNT}, first_site=${CAMPUS_FIRST_SITE}, dashboard=${DASHBOARD_TITLE_OK}"
 echo "Read endpoints:     constraints=${CONSTRAINT_COUNT}, recommendations=${RECOMMENDATION_COUNT}, blocked=${BLOCKED_COUNT}, explanations=${EXPLANATION_COUNT}"
 echo "Historical replay:  site=${OPERATIONAL_SITE_ID}, day=${REPLAY_DAY}, scenarios=${REPLAY_SCENARIOS}, persisted_alerts=${REPLAY_ALERTS}"
+echo "Shadow pilot:       evaluated=${SHADOW_EVALUATED}, blocked=${SHADOW_BLOCKED}, gaps=${SHADOW_GAPS}"
+echo "Review workflow:    status=${REVIEW_STATUS}, event=${REVIEW_EVENT_TYPE}, items=${REVIEW_LIST_COUNT}, timeline_events=${REVIEW_EVENT_COUNT}"
 echo "Accepted dispatch: ${ACCEPT_SNAPSHOT_ID} (status=${ACCEPT_STATUS}, decisions=${ACCEPT_DECISIONS})"
 echo "Partial dispatch:  ${PARTIAL_SNAPSHOT_ID} (status=${PARTIAL_STATUS}, accepted=${PARTIAL_ACCEPTED_KW} kW, code=${PARTIAL_VIOLATION_CODE})"
 echo "New snapshots:     ${SNAPSHOT_DELTA}"

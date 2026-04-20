@@ -635,3 +635,482 @@ func (r *PostgresRepository) relationExists(ctx context.Context, name string) bo
 	}
 	return relationName != nil && *relationName != ""
 }
+
+func (r *PostgresRepository) ListSiteProfiles(ctx context.Context) ([]orchestrator.SiteProfile, error) {
+	rows, err := r.pool.Query(ctx, `
+SELECT
+  site_id,
+  campus_name,
+  target_capacity_mw,
+  operating_reserve_pct,
+  ambient_reference_c,
+  ambient_derate_start_c,
+  ambient_derate_pct_per_deg,
+  ramp_up_kw_per_interval,
+  ramp_down_kw_per_interval,
+  ramp_interval_seconds,
+  advisory_mode
+FROM energy_site_profiles
+ORDER BY site_id
+`)
+	if err != nil {
+		return nil, fmt.Errorf("query site profiles: %w", err)
+	}
+	defer rows.Close()
+
+	items := make([]orchestrator.SiteProfile, 0)
+	for rows.Next() {
+		var item orchestrator.SiteProfile
+		if err := rows.Scan(
+			&item.SiteID,
+			&item.CampusName,
+			&item.TargetCapacityMW,
+			&item.OperatingReservePct,
+			&item.AmbientReferenceC,
+			&item.AmbientDerateStartC,
+			&item.AmbientDeratePctPerDeg,
+			&item.RampUpKWPerInterval,
+			&item.RampDownKWPerInterval,
+			&item.RampIntervalSeconds,
+			&item.AdvisoryMode,
+		); err != nil {
+			return nil, fmt.Errorf("scan site profile: %w", err)
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate site profiles: %w", err)
+	}
+	return items, nil
+}
+
+func (r *PostgresRepository) LoadRiskProjectionInput(ctx context.Context, siteID string, at time.Time) (orchestrator.RiskProjectionInput, error) {
+	budgetInput, err := r.LoadBudgetInput(ctx, siteID, at)
+	if err != nil {
+		return orchestrator.RiskProjectionInput{}, err
+	}
+	budget := orchestrator.ComputeSiteBudget(budgetInput)
+
+	start := at.UTC().Add(-4 * time.Hour)
+	rows, err := r.pool.Query(ctx, `
+SELECT
+  time_bucket(INTERVAL '1 hour', ts) AS bucket,
+  COALESCE(SUM(power_watts) / 1000.0, 0) AS load_kw,
+  COALESCE(AVG(
+    CASE
+      WHEN NULLIF(tags->>'ambient_temp_c', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+        THEN (tags->>'ambient_temp_c')::DOUBLE PRECISION
+      ELSE NULL
+    END
+  ), 0) AS ambient_celsius,
+  COALESCE(MAX(temp_celsius), 0) AS max_temp_celsius,
+  COUNT(*) FILTER (WHERE status IN ('critical', 'offline'))::bigint AS critical_events,
+  COALESCE(
+    COUNT(*) FILTER (WHERE hashrate_ths <= 0 AND power_watts > 0)::DOUBLE PRECISION / NULLIF(COUNT(*), 0),
+    0
+  ) AS sensor_error_rate
+FROM telemetry_readings
+WHERE site_id = $1
+  AND ts >= $2
+  AND ts <= $3
+GROUP BY 1
+ORDER BY 1
+`, siteID, start, at.UTC())
+	if err != nil {
+		return orchestrator.RiskProjectionInput{}, fmt.Errorf("query risk projection samples: %w", err)
+	}
+	defer rows.Close()
+
+	samples := make([]orchestrator.SiteProjectionSample, 0)
+	for rows.Next() {
+		var item orchestrator.SiteProjectionSample
+		if err := rows.Scan(
+			&item.Bucket,
+			&item.LoadKW,
+			&item.AmbientCelsius,
+			&item.MaxTempCelsius,
+			&item.CriticalEvents,
+			&item.SensorErrorRate,
+		); err != nil {
+			return orchestrator.RiskProjectionInput{}, fmt.Errorf("scan risk projection sample: %w", err)
+		}
+		samples = append(samples, item)
+	}
+	if err := rows.Err(); err != nil {
+		return orchestrator.RiskProjectionInput{}, fmt.Errorf("iterate risk projection samples: %w", err)
+	}
+
+	return orchestrator.RiskProjectionInput{
+		At:            at.UTC(),
+		Site:          budgetInput.Site,
+		Budget:        budget,
+		Samples:       samples,
+		CurrentTariff: r.loadTariffWindow(ctx, siteID, at),
+	}, nil
+}
+
+func (r *PostgresRepository) loadTariffWindow(ctx context.Context, siteID string, at time.Time) *orchestrator.TariffWindow {
+	if !r.relationExists(ctx, "energy_tariff_windows") {
+		return nil
+	}
+
+	var item orchestrator.TariffWindow
+	err := r.pool.QueryRow(ctx, `
+SELECT
+  window_id,
+  site_id,
+  tariff_code,
+  price_usd_per_mwh,
+  effective_from,
+  effective_to,
+  price_usd_per_mwh >= 140 AS is_expensive_band
+FROM energy_tariff_windows
+WHERE site_id = $1
+  AND $2 >= effective_from
+  AND $2 < effective_to
+ORDER BY effective_from DESC
+LIMIT 1
+`, siteID, at.UTC()).Scan(
+		&item.WindowID,
+		&item.SiteID,
+		&item.TariffCode,
+		&item.PriceUSDPerMWh,
+		&item.EffectiveFrom,
+		&item.EffectiveTo,
+		&item.IsExpensiveBand,
+	)
+	if err != nil {
+		return nil
+	}
+	return &item
+}
+
+func (r *PostgresRepository) GetRecommendationReview(ctx context.Context, siteID, recommendationID string) (orchestrator.RecommendationReview, error) {
+	row := r.pool.QueryRow(ctx, `
+SELECT
+  review_id,
+  site_id,
+  snapshot_id,
+  recommendation_id,
+  COALESCE(rack_id, ''),
+  action,
+  criticality_class,
+  requested_delta_kw,
+  recommended_delta_kw,
+  reason,
+  decision,
+  status,
+  sensitivity,
+  requires_dual_confirmation,
+  requested_by,
+  requested_by_role,
+  COALESCE(first_approved_by, ''),
+  COALESCE(second_approved_by, ''),
+  COALESCE(rejected_by, ''),
+  COALESCE(postponed_by, ''),
+  postponed_until,
+  COALESCE(comment, ''),
+  final_decision_at,
+  created_at,
+  updated_at
+FROM energy_recommendation_reviews
+WHERE site_id = $1
+  AND recommendation_id = $2
+`, siteID, recommendationID)
+	return scanRecommendationReview(row)
+}
+
+func (r *PostgresRepository) ListRecommendationReviews(ctx context.Context, siteID, status string) ([]orchestrator.RecommendationReview, error) {
+	query := `
+SELECT
+  review_id,
+  site_id,
+  snapshot_id,
+  recommendation_id,
+  COALESCE(rack_id, ''),
+  action,
+  criticality_class,
+  requested_delta_kw,
+  recommended_delta_kw,
+  reason,
+  decision,
+  status,
+  sensitivity,
+  requires_dual_confirmation,
+  requested_by,
+  requested_by_role,
+  COALESCE(first_approved_by, ''),
+  COALESCE(second_approved_by, ''),
+  COALESCE(rejected_by, ''),
+  COALESCE(postponed_by, ''),
+  postponed_until,
+  COALESCE(comment, ''),
+  final_decision_at,
+  created_at,
+  updated_at
+FROM energy_recommendation_reviews
+WHERE site_id = $1
+`
+	args := []any{siteID}
+	if status != "" {
+		query += ` AND status = $2`
+		args = append(args, status)
+	}
+	query += ` ORDER BY updated_at DESC, created_at DESC`
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query recommendation reviews: %w", err)
+	}
+	defer rows.Close()
+
+	items := make([]orchestrator.RecommendationReview, 0)
+	for rows.Next() {
+		item, err := scanRecommendationReview(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate recommendation reviews: %w", err)
+	}
+	return items, nil
+}
+
+func (r *PostgresRepository) CreateRecommendationReview(ctx context.Context, input RecommendationReviewCreateInput) (orchestrator.RecommendationReview, error) {
+	row := r.pool.QueryRow(ctx, `
+INSERT INTO energy_recommendation_reviews (
+  review_id,
+  site_id,
+  snapshot_id,
+  recommendation_id,
+  rack_id,
+  action,
+  criticality_class,
+  requested_delta_kw,
+  recommended_delta_kw,
+  reason,
+  decision,
+  status,
+  sensitivity,
+  requires_dual_confirmation,
+  requested_by,
+  requested_by_role,
+  first_approved_by,
+  second_approved_by,
+  rejected_by,
+  postponed_by,
+  postponed_until,
+  comment,
+  final_decision_at
+)
+VALUES (
+  $1, $2, $3, $4, NULLIF($5, ''), $6, $7, $8, $9, $10, $11, $12, $13, $14,
+  $15, $16, NULLIF($17, ''), NULLIF($18, ''), NULLIF($19, ''), NULLIF($20, ''), $21, $22, $23
+)
+RETURNING
+  review_id,
+  site_id,
+  snapshot_id,
+  recommendation_id,
+  COALESCE(rack_id, ''),
+  action,
+  criticality_class,
+  requested_delta_kw,
+  recommended_delta_kw,
+  reason,
+  decision,
+  status,
+  sensitivity,
+  requires_dual_confirmation,
+  requested_by,
+  requested_by_role,
+  COALESCE(first_approved_by, ''),
+  COALESCE(second_approved_by, ''),
+  COALESCE(rejected_by, ''),
+  COALESCE(postponed_by, ''),
+  postponed_until,
+  COALESCE(comment, ''),
+  final_decision_at,
+  created_at,
+  updated_at
+`, uuid.NewString(), input.SiteID, input.SnapshotID, input.RecommendationID, input.RackID, input.Action, input.CriticalityClass,
+		input.RequestedDeltaKW, input.RecommendedDeltaKW, input.Reason, input.Decision, input.Status, input.Sensitivity,
+		input.RequiresDualConfirmation, input.RequestedBy, input.RequestedByRole, input.FirstApprovedBy, input.SecondApprovedBy,
+		input.RejectedBy, input.PostponedBy, input.PostponedUntil, input.Comment, input.FinalDecisionAt,
+	)
+	return scanRecommendationReview(row)
+}
+
+func (r *PostgresRepository) ListRecommendationReviewEvents(ctx context.Context, reviewID string) ([]orchestrator.RecommendationReviewEvent, error) {
+	rows, err := r.pool.Query(ctx, `
+SELECT
+  event_id,
+  review_id,
+  site_id,
+  COALESCE(rack_id, ''),
+  actor_id,
+  actor_role,
+  event_type,
+  COALESCE(decision, ''),
+  COALESCE(comment, ''),
+  created_at
+FROM energy_recommendation_review_events
+WHERE review_id = $1
+ORDER BY created_at ASC, event_id ASC
+`, reviewID)
+	if err != nil {
+		return nil, fmt.Errorf("query recommendation review events: %w", err)
+	}
+	defer rows.Close()
+
+	items := make([]orchestrator.RecommendationReviewEvent, 0)
+	for rows.Next() {
+		item, err := scanRecommendationReviewEvent(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate recommendation review events: %w", err)
+	}
+	return items, nil
+}
+
+func (r *PostgresRepository) UpdateRecommendationReview(ctx context.Context, input RecommendationReviewUpdateInput) (orchestrator.RecommendationReview, error) {
+	row := r.pool.QueryRow(ctx, `
+UPDATE energy_recommendation_reviews
+SET
+  status = $2,
+  decision = $3,
+  first_approved_by = NULLIF($4, ''),
+  second_approved_by = NULLIF($5, ''),
+  rejected_by = NULLIF($6, ''),
+  postponed_by = NULLIF($7, ''),
+  postponed_until = $8,
+  comment = $9,
+  final_decision_at = $10,
+  updated_at = NOW()
+WHERE review_id = $1
+RETURNING
+  review_id,
+  site_id,
+  snapshot_id,
+  recommendation_id,
+  COALESCE(rack_id, ''),
+  action,
+  criticality_class,
+  requested_delta_kw,
+  recommended_delta_kw,
+  reason,
+  decision,
+  status,
+  sensitivity,
+  requires_dual_confirmation,
+  requested_by,
+  requested_by_role,
+  COALESCE(first_approved_by, ''),
+  COALESCE(second_approved_by, ''),
+  COALESCE(rejected_by, ''),
+  COALESCE(postponed_by, ''),
+  postponed_until,
+  COALESCE(comment, ''),
+  final_decision_at,
+  created_at,
+  updated_at
+`, input.ReviewID, input.Status, input.Decision, input.FirstApprovedBy, input.SecondApprovedBy, input.RejectedBy, input.PostponedBy, input.PostponedUntil, input.Comment, input.FinalDecisionAt)
+	return scanRecommendationReview(row)
+}
+
+func (r *PostgresRepository) AppendRecommendationReviewEvent(ctx context.Context, input RecommendationReviewEventCreateInput) (orchestrator.RecommendationReviewEvent, error) {
+	event := orchestrator.RecommendationReviewEvent{}
+	err := r.pool.QueryRow(ctx, `
+INSERT INTO energy_recommendation_review_events (
+  event_id,
+  review_id,
+  site_id,
+  rack_id,
+  actor_id,
+  actor_role,
+  event_type,
+  decision,
+  comment
+)
+VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6, $7, NULLIF($8, ''), $9)
+RETURNING event_id, review_id, site_id, COALESCE(rack_id, ''), actor_id, actor_role, event_type, COALESCE(decision, ''), comment, created_at
+`, uuid.NewString(), input.ReviewID, input.SiteID, input.RackID, input.ActorID, input.ActorRole, input.EventType, input.Decision, input.Comment).Scan(
+		&event.EventID,
+		&event.ReviewID,
+		&event.SiteID,
+		&event.RackID,
+		&event.ActorID,
+		&event.ActorRole,
+		&event.EventType,
+		&event.Decision,
+		&event.Comment,
+		&event.CreatedAt,
+	)
+	if err != nil {
+		return orchestrator.RecommendationReviewEvent{}, fmt.Errorf("insert recommendation review event: %w", err)
+	}
+	return event, nil
+}
+
+type reviewScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanRecommendationReview(scanner reviewScanner) (orchestrator.RecommendationReview, error) {
+	var item orchestrator.RecommendationReview
+	if err := scanner.Scan(
+		&item.ReviewID,
+		&item.SiteID,
+		&item.SnapshotID,
+		&item.RecommendationID,
+		&item.RackID,
+		&item.Action,
+		&item.CriticalityClass,
+		&item.RequestedDeltaKW,
+		&item.RecommendedDeltaKW,
+		&item.Reason,
+		&item.Decision,
+		&item.Status,
+		&item.Sensitivity,
+		&item.RequiresDualConfirmation,
+		&item.RequestedBy,
+		&item.RequestedByRole,
+		&item.FirstApprovedBy,
+		&item.SecondApprovedBy,
+		&item.RejectedBy,
+		&item.PostponedBy,
+		&item.PostponedUntil,
+		&item.Comment,
+		&item.FinalDecisionAt,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+	); err != nil {
+		return orchestrator.RecommendationReview{}, fmt.Errorf("scan recommendation review: %w", err)
+	}
+	return item, nil
+}
+
+func scanRecommendationReviewEvent(scanner reviewScanner) (orchestrator.RecommendationReviewEvent, error) {
+	var item orchestrator.RecommendationReviewEvent
+	if err := scanner.Scan(
+		&item.EventID,
+		&item.ReviewID,
+		&item.SiteID,
+		&item.RackID,
+		&item.ActorID,
+		&item.ActorRole,
+		&item.EventType,
+		&item.Decision,
+		&item.Comment,
+		&item.CreatedAt,
+	); err != nil {
+		return orchestrator.RecommendationReviewEvent{}, fmt.Errorf("scan recommendation review event: %w", err)
+	}
+	return item, nil
+}

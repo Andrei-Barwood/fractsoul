@@ -20,6 +20,15 @@ func NewRouter(logger *slog.Logger, appService *service.Service, authConfig APIK
 	router.Use(RequestIDMiddleware())
 	router.Use(AccessLogMiddleware(logger))
 
+	dashboardFS := dashboardFileSystem()
+	router.GET("/", func(c *gin.Context) {
+		c.Redirect(http.StatusTemporaryRedirect, "/dashboard/energy/")
+	})
+	router.GET("/dashboard", func(c *gin.Context) {
+		c.Redirect(http.StatusTemporaryRedirect, "/dashboard/energy/")
+	})
+	router.StaticFS("/dashboard/energy", dashboardFS)
+
 	energyHandler := NewEnergyHandler(logger, appService, options)
 
 	router.GET("/healthz", func(c *gin.Context) {
@@ -33,19 +42,32 @@ func NewRouter(logger *slog.Logger, appService *service.Service, authConfig APIK
 		readGroup := v1.Group("")
 		readGroup.Use(RequireRoles(logger, RoleViewer, RoleOperator, RoleAdmin))
 		{
-			readGroup.GET("/energy/sites/:site_id/budget", energyHandler.SiteBudget)
-			readGroup.GET("/energy/sites/:site_id/operations", energyHandler.SiteOperationalView)
-			readGroup.GET("/energy/sites/:site_id/constraints/active", energyHandler.ActiveConstraints)
-			readGroup.GET("/energy/sites/:site_id/recommendations/pending", energyHandler.PendingRecommendations)
-			readGroup.GET("/energy/sites/:site_id/actions/blocked", energyHandler.BlockedActions)
-			readGroup.GET("/energy/sites/:site_id/explanations", energyHandler.DecisionExplanations)
-			readGroup.GET("/energy/sites/:site_id/replay/historical", energyHandler.HistoricalReplay)
+			readGroup.GET("/energy/overview", energyHandler.CampusOverview)
+
+			siteReadGroup := readGroup.Group("/energy/sites/:site_id")
+			siteReadGroup.Use(RequireSiteAccess(logger))
+			{
+				siteReadGroup.GET("/budget", energyHandler.SiteBudget)
+				siteReadGroup.GET("/operations", energyHandler.SiteOperationalView)
+				siteReadGroup.GET("/constraints/active", energyHandler.ActiveConstraints)
+				siteReadGroup.GET("/recommendations/pending", energyHandler.PendingRecommendations)
+				siteReadGroup.GET("/recommendations/reviews", energyHandler.ListRecommendationReviews)
+				siteReadGroup.GET("/actions/blocked", energyHandler.BlockedActions)
+				siteReadGroup.GET("/explanations", energyHandler.DecisionExplanations)
+				siteReadGroup.GET("/replay/historical", energyHandler.HistoricalReplay)
+				siteReadGroup.GET("/pilot/shadow", energyHandler.ShadowPilot)
+			}
 		}
 
 		writeGroup := v1.Group("")
 		writeGroup.Use(RequireRoles(logger, RoleOperator, RoleAdmin))
 		{
-			writeGroup.POST("/energy/sites/:site_id/dispatch/validate", energyHandler.ValidateDispatch)
+			siteWriteGroup := writeGroup.Group("/energy/sites/:site_id")
+			siteWriteGroup.Use(RequireSiteAccess(logger))
+			{
+				siteWriteGroup.POST("/dispatch/validate", energyHandler.ValidateDispatch)
+				siteWriteGroup.POST("/recommendations/reviews", energyHandler.ReviewRecommendation)
+			}
 		}
 	}
 

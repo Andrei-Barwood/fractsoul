@@ -1,6 +1,8 @@
 package orchestrator
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
@@ -182,14 +184,16 @@ func buildPendingRecommendations(budget SiteBudget) []PendingRecommendation {
 			if rack.DownRampRemainingKW > 0 {
 				reduction = minPositive(reduction, rack.DownRampRemainingKW)
 			}
+			reason := "safety block active on rack"
 			recommendations = append(recommendations, PendingRecommendation{
+				RecommendationID:   recommendationID(budget.SiteID, rack.RackID, "isolate", -reduction, reason),
 				RackID:             rack.RackID,
 				Action:             "isolate",
 				CriticalityClass:   rack.CriticalityClass,
 				PriorityRank:       1,
 				RequestedDeltaKW:   -rack.CurrentLoadKW,
 				RecommendedDeltaKW: -reduction,
-				Reason:             "safety block active on rack",
+				Reason:             reason,
 				Explanation:        fmt.Sprintf("rack %s is safety-blocked, so the safest advisory action is to reduce %.2f kW as quickly as allowed.", rack.RackID, reduction),
 				ConstraintCodes:    []string{"rack_safety_blocked"},
 			})
@@ -217,14 +221,16 @@ func buildPendingRecommendations(budget SiteBudget) []PendingRecommendation {
 			continue
 		}
 
+		reason := "site load should be reduced to recover safe headroom"
 		recommendations = append(recommendations, PendingRecommendation{
+			RecommendationID:   recommendationID(budget.SiteID, rack.RackID, "curtail", -reduction, reason),
 			RackID:             rack.RackID,
 			Action:             "curtail",
 			CriticalityClass:   rack.CriticalityClass,
 			PriorityRank:       curtailmentPriority(rack.CriticalityClass),
 			RequestedDeltaKW:   -remainingReductionKW,
 			RecommendedDeltaKW: -reduction,
-			Reason:             "site load should be reduced to recover safe headroom",
+			Reason:             reason,
 			Explanation:        fmt.Sprintf("rack %s is classified as %s, so it is part of the curtailment sequence to recover %.2f kW of site headroom.", rack.RackID, rack.CriticalityClass, reduction),
 			ConstraintCodes:    rack.ConstraintFlags,
 		})
@@ -232,14 +238,16 @@ func buildPendingRecommendations(budget SiteBudget) []PendingRecommendation {
 	}
 
 	if remainingReductionKW > 0 {
+		reason := "curtailment pool is insufficient to recover all safe headroom"
 		recommendations = append(recommendations, PendingRecommendation{
+			RecommendationID:   recommendationID(budget.SiteID, "", "escalate", -remainingReductionKW, reason),
 			RackID:             "",
 			Action:             "escalate",
 			CriticalityClass:   LoadClassPreferredProduction,
 			PriorityRank:       5,
 			RequestedDeltaKW:   -remainingReductionKW,
 			RecommendedDeltaKW: -remainingReductionKW,
-			Reason:             "curtailment pool is insufficient to recover all safe headroom",
+			Reason:             reason,
 			Explanation:        "the current site overload cannot be fully absorbed by sacrificial and normal loads, so the remaining gap requires operator review before touching preferred production.",
 			ConstraintCodes:    []string{"site_current_load_above_safe_capacity"},
 		})
@@ -249,6 +257,11 @@ func buildPendingRecommendations(budget SiteBudget) []PendingRecommendation {
 		return nil
 	}
 	return recommendations
+}
+
+func recommendationID(siteID, rackID, action string, deltaKW float64, reason string) string {
+	sum := sha1.Sum([]byte(fmt.Sprintf("%s|%s|%s|%.3f|%s", siteID, rackID, action, deltaKW, reason)))
+	return "rec-" + hex.EncodeToString(sum[:8])
 }
 
 func buildBlockedActions(budget SiteBudget) []BlockedAction {

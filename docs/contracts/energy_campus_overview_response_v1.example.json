@@ -1,0 +1,43 @@
+{
+  "request_id": "req-energy-overview-001",
+  "overview": {
+    "calculated_at": "2026-04-20T19:30:00Z",
+    "site_count": 2,
+    "sites": [
+      {
+        "site_id": "site-cl-02",
+        "campus_name": "Calama Sur Campus",
+        "calculated_at": "2026-04-20T19:30:00Z",
+        "current_load_kw": 482.4,
+        "allowed_load_kw": 855,
+        "margin_remaining_kw": 372.6,
+        "sacrificable_rack_count": 1,
+        "safety_blocked_rack_count": 1,
+        "current_tariff_code": "peak_response",
+        "current_tariff_price_usd_per_mwh": 162,
+        "current_tariff_expensive": true,
+        "active_constraint_count": 3,
+        "pending_recommendation_count": 2,
+        "top_risks": [
+          "expensive_tariff_active",
+          "rack_safety_blocked"
+        ],
+        "risk_projection": [
+          {
+            "at": "2026-04-20T20:30:00Z",
+            "projected_load_kw": 505.2,
+            "projected_safe_capacity_kw": 842.1,
+            "projected_margin_kw": 336.9,
+            "projected_ambient_celsius": 31.4,
+            "risk_level": "moderate",
+            "risk_score": 32,
+            "reasons": [
+              "expensive_tariff_active",
+              "recent_critical_events"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

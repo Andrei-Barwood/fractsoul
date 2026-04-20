@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"github.com/fractsoul/mvp/backend/services/energy-orchestrator/internal/orchestrator"
 	"github.com/fractsoul/mvp/backend/services/energy-orchestrator/internal/storage"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 type Service struct {
@@ -65,6 +68,38 @@ type ReplayHistoricalOptions struct {
 
 type ReplayHistoricalResult struct {
 	Result orchestrator.HistoricalReplayResult `json:"result"`
+}
+
+type CampusOverviewOptions struct {
+	RequestID      string
+	AllowedSiteIDs []string
+}
+
+type CampusOverviewResult struct {
+	Overview orchestrator.CampusOverview `json:"overview"`
+}
+
+type RecommendationReviewOptions struct {
+	ActorID   string
+	ActorRole string
+	Request   orchestrator.RecommendationReviewRequest
+}
+
+type RecommendationReviewResult struct {
+	Review orchestrator.RecommendationReview      `json:"review"`
+	Event  orchestrator.RecommendationReviewEvent `json:"event"`
+}
+
+type RecommendationReviewListResult struct {
+	Items []orchestrator.RecommendationReview `json:"items"`
+}
+
+type ShadowPilotOptions struct {
+	RequestID string
+}
+
+type ShadowPilotResult struct {
+	Result orchestrator.ShadowPilotResult `json:"result"`
 }
 
 func NewService(logger *slog.Logger, repository storage.Repository, publisher events.Publisher, fractsoulClient *fractsoul.Client) *Service {
@@ -125,6 +160,250 @@ func (s *Service) ReplayHistoricalDay(ctx context.Context, siteID string, day ti
 	return ReplayHistoricalResult{
 		Result: orchestrator.RunHistoricalReplay(input),
 	}, nil
+}
+
+func (s *Service) RunShadowPilot(ctx context.Context, siteID string, day time.Time, _ ShadowPilotOptions) (ShadowPilotResult, error) {
+	input, err := s.repository.LoadHistoricalReplayInput(ctx, siteID, day)
+	if err != nil {
+		return ShadowPilotResult{}, err
+	}
+
+	return ShadowPilotResult{
+		Result: orchestrator.RunShadowPilot(input),
+	}, nil
+}
+
+func (s *Service) GetCampusOverview(ctx context.Context, at time.Time, options CampusOverviewOptions) (CampusOverviewResult, error) {
+	sites, err := s.repository.ListSiteProfiles(ctx)
+	if err != nil {
+		return CampusOverviewResult{}, err
+	}
+	allowed := make(map[string]struct{}, len(options.AllowedSiteIDs))
+	for _, siteID := range options.AllowedSiteIDs {
+		if siteID == "*" || siteID == "" {
+			allowed = nil
+			break
+		}
+		allowed[siteID] = struct{}{}
+	}
+
+	siteOverviews := make([]orchestrator.SiteOverview, 0, len(sites))
+	for _, site := range sites {
+		if allowed != nil {
+			if _, ok := allowed[site.SiteID]; !ok {
+				continue
+			}
+		}
+		budget, _, err := s.computeBudget(ctx, site.SiteID, at, ComputeBudgetOptions{
+			RequestID:      options.RequestID,
+			Source:         "campus_overview",
+			IncludeContext: false,
+		})
+		if err != nil {
+			return CampusOverviewResult{}, err
+		}
+		view := orchestrator.BuildOperationalView(budget)
+		riskInput, err := s.repository.LoadRiskProjectionInput(ctx, site.SiteID, at)
+		if err != nil {
+			return CampusOverviewResult{}, err
+		}
+		projection := orchestrator.ProjectSiteRisk(riskInput)
+		siteOverviews = append(siteOverviews, orchestrator.BuildSiteOverview(site, view, projection, riskInput.CurrentTariff))
+	}
+
+	return CampusOverviewResult{
+		Overview: orchestrator.BuildCampusOverview(at, siteOverviews),
+	}, nil
+}
+
+func (s *Service) ReviewRecommendation(ctx context.Context, siteID string, options RecommendationReviewOptions) (RecommendationReviewResult, error) {
+	actorID := strings.TrimSpace(options.ActorID)
+	if actorID == "" {
+		actorID = "unknown"
+	}
+	actorRole := strings.TrimSpace(options.ActorRole)
+	if actorRole == "" {
+		actorRole = "viewer"
+	}
+
+	sensitivity, requiresDual := orchestrator.SensitiveReviewLevel(options.Request)
+	existing, err := s.repository.GetRecommendationReview(ctx, siteID, options.Request.RecommendationID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return RecommendationReviewResult{}, err
+	}
+
+	if existing.ReviewID == "" {
+		status := orchestrator.ReviewStatusApproved
+		eventType := "approved"
+		finalDecisionAt := timePtr(time.Now().UTC())
+		firstApprovedBy := ""
+		rejectedBy := ""
+		postponedBy := ""
+
+		switch options.Request.Decision {
+		case orchestrator.DecisionApprove:
+			if requiresDual {
+				status = orchestrator.ReviewStatusPendingSecondApproval
+				eventType = "awaiting_second_approval"
+				finalDecisionAt = nil
+				firstApprovedBy = actorID
+			} else {
+				firstApprovedBy = actorID
+			}
+		case orchestrator.DecisionReject:
+			status = orchestrator.ReviewStatusRejected
+			eventType = "rejected"
+			rejectedBy = actorID
+		case orchestrator.DecisionPostpone:
+			status = orchestrator.ReviewStatusPostponed
+			eventType = "postponed"
+			postponedBy = actorID
+		default:
+			return RecommendationReviewResult{}, fmt.Errorf("unsupported recommendation decision: %s", options.Request.Decision)
+		}
+
+		review, err := s.repository.CreateRecommendationReview(ctx, storage.RecommendationReviewCreateInput{
+			SiteID:                   siteID,
+			SnapshotID:               options.Request.SnapshotID,
+			RecommendationID:         options.Request.RecommendationID,
+			RackID:                   options.Request.RackID,
+			Action:                   options.Request.Action,
+			CriticalityClass:         options.Request.CriticalityClass,
+			RequestedDeltaKW:         options.Request.RequestedDeltaKW,
+			RecommendedDeltaKW:       options.Request.RecommendedDeltaKW,
+			Reason:                   options.Request.Reason,
+			Decision:                 options.Request.Decision,
+			Status:                   status,
+			Sensitivity:              sensitivity,
+			RequiresDualConfirmation: requiresDual,
+			RequestedBy:              actorID,
+			RequestedByRole:          actorRole,
+			FirstApprovedBy:          firstApprovedBy,
+			RejectedBy:               rejectedBy,
+			PostponedBy:              postponedBy,
+			PostponedUntil:           options.Request.PostponeUntil,
+			Comment:                  options.Request.Comment,
+			FinalDecisionAt:          finalDecisionAt,
+		})
+		if err != nil {
+			return RecommendationReviewResult{}, err
+		}
+		event, err := s.repository.AppendRecommendationReviewEvent(ctx, storage.RecommendationReviewEventCreateInput{
+			ReviewID:  review.ReviewID,
+			SiteID:    siteID,
+			RackID:    options.Request.RackID,
+			ActorID:   actorID,
+			ActorRole: actorRole,
+			EventType: eventType,
+			Decision:  options.Request.Decision,
+			Comment:   options.Request.Comment,
+		})
+		if err != nil {
+			return RecommendationReviewResult{}, err
+		}
+		review, err = s.decorateRecommendationReview(ctx, review)
+		if err != nil {
+			return RecommendationReviewResult{}, err
+		}
+		return RecommendationReviewResult{Review: review, Event: event}, nil
+	}
+
+	if existing.Status == orchestrator.ReviewStatusApproved || existing.Status == orchestrator.ReviewStatusRejected || existing.Status == orchestrator.ReviewStatusPostponed {
+		return RecommendationReviewResult{}, fmt.Errorf("recommendation review already finalized")
+	}
+
+	eventType := "updated"
+	finalDecisionAt := timePtr(time.Now().UTC())
+	update := storage.RecommendationReviewUpdateInput{
+		ReviewID:         existing.ReviewID,
+		Status:           existing.Status,
+		Decision:         options.Request.Decision,
+		FirstApprovedBy:  existing.FirstApprovedBy,
+		SecondApprovedBy: existing.SecondApprovedBy,
+		RejectedBy:       existing.RejectedBy,
+		PostponedBy:      existing.PostponedBy,
+		PostponedUntil:   options.Request.PostponeUntil,
+		Comment:          options.Request.Comment,
+		FinalDecisionAt:  finalDecisionAt,
+	}
+
+	switch options.Request.Decision {
+	case orchestrator.DecisionApprove:
+		if existing.RequiresDualConfirmation {
+			if existing.FirstApprovedBy == actorID {
+				return RecommendationReviewResult{}, fmt.Errorf("second approval must come from a different actor")
+			}
+			update.Status = orchestrator.ReviewStatusApproved
+			update.SecondApprovedBy = actorID
+			eventType = "second_approved"
+		} else {
+			update.Status = orchestrator.ReviewStatusApproved
+			update.FirstApprovedBy = actorID
+			eventType = "approved"
+		}
+	case orchestrator.DecisionReject:
+		update.Status = orchestrator.ReviewStatusRejected
+		update.RejectedBy = actorID
+		eventType = "rejected"
+	case orchestrator.DecisionPostpone:
+		update.Status = orchestrator.ReviewStatusPostponed
+		update.PostponedBy = actorID
+		eventType = "postponed"
+	default:
+		return RecommendationReviewResult{}, fmt.Errorf("unsupported recommendation decision: %s", options.Request.Decision)
+	}
+
+	review, err := s.repository.UpdateRecommendationReview(ctx, update)
+	if err != nil {
+		return RecommendationReviewResult{}, err
+	}
+	event, err := s.repository.AppendRecommendationReviewEvent(ctx, storage.RecommendationReviewEventCreateInput{
+		ReviewID:  review.ReviewID,
+		SiteID:    siteID,
+		RackID:    review.RackID,
+		ActorID:   actorID,
+		ActorRole: actorRole,
+		EventType: eventType,
+		Decision:  options.Request.Decision,
+		Comment:   options.Request.Comment,
+	})
+	if err != nil {
+		return RecommendationReviewResult{}, err
+	}
+	review, err = s.decorateRecommendationReview(ctx, review)
+	if err != nil {
+		return RecommendationReviewResult{}, err
+	}
+	return RecommendationReviewResult{Review: review, Event: event}, nil
+}
+
+func (s *Service) ListRecommendationReviews(ctx context.Context, siteID, status string) (RecommendationReviewListResult, error) {
+	items, err := s.repository.ListRecommendationReviews(ctx, siteID, status)
+	if err != nil {
+		return RecommendationReviewListResult{}, err
+	}
+	for idx := range items {
+		items[idx], err = s.decorateRecommendationReview(ctx, items[idx])
+		if err != nil {
+			return RecommendationReviewListResult{}, err
+		}
+	}
+	return RecommendationReviewListResult{Items: items}, nil
+}
+
+func (s *Service) decorateRecommendationReview(ctx context.Context, review orchestrator.RecommendationReview) (orchestrator.RecommendationReview, error) {
+	if strings.TrimSpace(review.ReviewID) == "" {
+		return review, nil
+	}
+
+	events, err := s.repository.ListRecommendationReviewEvents(ctx, review.ReviewID)
+	if err != nil {
+		return orchestrator.RecommendationReview{}, err
+	}
+
+	review.Events = events
+	review.Summary = orchestrator.BuildReviewSummary(review)
+	return review, nil
 }
 
 func (s *Service) computeBudget(ctx context.Context, siteID string, at time.Time, options ComputeBudgetOptions) (orchestrator.SiteBudget, *fractsoul.ContextEnrichment, error) {
@@ -328,4 +607,8 @@ func maxFloat(a, b float64) float64 {
 		return a
 	}
 	return b
+}
+
+func timePtr(value time.Time) *time.Time {
+	return &value
 }

@@ -221,6 +221,7 @@ type ActiveConstraint struct {
 }
 
 type PendingRecommendation struct {
+	RecommendationID   string               `json:"recommendation_id"`
 	RackID             string               `json:"rack_id"`
 	Action             string               `json:"action"`
 	CriticalityClass   LoadCriticalityClass `json:"criticality_class"`
@@ -310,4 +311,167 @@ type HistoricalReplayResult struct {
 	ObservedPersistedAlerts int64                   `json:"observed_persisted_alerts"`
 	Observed                ReplayScenarioMetrics   `json:"observed"`
 	Scenarios               []ReplayScenarioMetrics `json:"scenarios"`
+}
+
+type TariffWindow struct {
+	WindowID        string    `json:"window_id,omitempty"`
+	SiteID          string    `json:"site_id"`
+	TariffCode      string    `json:"tariff_code"`
+	PriceUSDPerMWh  float64   `json:"price_usd_per_mwh"`
+	EffectiveFrom   time.Time `json:"effective_from"`
+	EffectiveTo     time.Time `json:"effective_to"`
+	IsExpensiveBand bool      `json:"is_expensive_band"`
+}
+
+type SiteProjectionSample struct {
+	Bucket          time.Time `json:"bucket"`
+	LoadKW          float64   `json:"load_kw"`
+	AmbientCelsius  float64   `json:"ambient_celsius"`
+	MaxTempCelsius  float64   `json:"max_temp_celsius"`
+	CriticalEvents  int64     `json:"critical_events"`
+	SensorErrorRate float64   `json:"sensor_error_rate"`
+}
+
+type RiskProjectionInput struct {
+	At            time.Time              `json:"at"`
+	Site          SiteProfile            `json:"site"`
+	Budget        SiteBudget             `json:"budget"`
+	Samples       []SiteProjectionSample `json:"samples"`
+	CurrentTariff *TariffWindow          `json:"current_tariff,omitempty"`
+}
+
+type SiteRiskProjectionPoint struct {
+	At                      time.Time `json:"at"`
+	ProjectedLoadKW         float64   `json:"projected_load_kw"`
+	ProjectedSafeCapacityKW float64   `json:"projected_safe_capacity_kw"`
+	ProjectedMarginKW       float64   `json:"projected_margin_kw"`
+	ProjectedAmbientCelsius float64   `json:"projected_ambient_celsius"`
+	RiskLevel               string    `json:"risk_level"`
+	RiskScore               float64   `json:"risk_score"`
+	Reasons                 []string  `json:"reasons,omitempty"`
+}
+
+type SiteOverview struct {
+	SiteID                      string                    `json:"site_id"`
+	CampusName                  string                    `json:"campus_name"`
+	CalculatedAt                time.Time                 `json:"calculated_at"`
+	CurrentLoadKW               float64                   `json:"current_load_kw"`
+	AllowedLoadKW               float64                   `json:"allowed_load_kw"`
+	MarginRemainingKW           float64                   `json:"margin_remaining_kw"`
+	SacrificableRackCount       int                       `json:"sacrificable_rack_count"`
+	SafetyBlockedRackCount      int                       `json:"safety_blocked_rack_count"`
+	CurrentTariffCode           string                    `json:"current_tariff_code,omitempty"`
+	CurrentTariffPriceUSDPerMWh float64                   `json:"current_tariff_price_usd_per_mwh,omitempty"`
+	CurrentTariffExpensive      bool                      `json:"current_tariff_expensive"`
+	ActiveConstraintCount       int                       `json:"active_constraint_count"`
+	PendingRecommendationCount  int                       `json:"pending_recommendation_count"`
+	TopRisks                    []string                  `json:"top_risks,omitempty"`
+	RiskProjection              []SiteRiskProjectionPoint `json:"risk_projection,omitempty"`
+}
+
+type CampusOverview struct {
+	CalculatedAt time.Time      `json:"calculated_at"`
+	SiteCount    int            `json:"site_count"`
+	Sites        []SiteOverview `json:"sites"`
+}
+
+type RecommendationDecision string
+
+const (
+	DecisionApprove  RecommendationDecision = "approve"
+	DecisionReject   RecommendationDecision = "reject"
+	DecisionPostpone RecommendationDecision = "postpone"
+)
+
+type RecommendationReviewStatus string
+
+const (
+	ReviewStatusPendingSecondApproval RecommendationReviewStatus = "pending_second_approval"
+	ReviewStatusApproved              RecommendationReviewStatus = "approved"
+	ReviewStatusRejected              RecommendationReviewStatus = "rejected"
+	ReviewStatusPostponed             RecommendationReviewStatus = "postponed"
+)
+
+type RecommendationReviewSensitivity string
+
+const (
+	SensitivityStandard RecommendationReviewSensitivity = "standard"
+	SensitivityHigh     RecommendationReviewSensitivity = "high"
+)
+
+type RecommendationReviewRequest struct {
+	SnapshotID         string                 `json:"snapshot_id"`
+	RecommendationID   string                 `json:"recommendation_id"`
+	RackID             string                 `json:"rack_id,omitempty"`
+	Action             string                 `json:"action"`
+	CriticalityClass   LoadCriticalityClass   `json:"criticality_class"`
+	RequestedDeltaKW   float64                `json:"requested_delta_kw"`
+	RecommendedDeltaKW float64                `json:"recommended_delta_kw"`
+	Reason             string                 `json:"reason"`
+	Decision           RecommendationDecision `json:"decision"`
+	Comment            string                 `json:"comment,omitempty"`
+	PostponeUntil      *time.Time             `json:"postpone_until,omitempty"`
+}
+
+type RecommendationReview struct {
+	ReviewID                 string                          `json:"review_id"`
+	SiteID                   string                          `json:"site_id"`
+	SnapshotID               string                          `json:"snapshot_id"`
+	RecommendationID         string                          `json:"recommendation_id"`
+	RackID                   string                          `json:"rack_id,omitempty"`
+	Action                   string                          `json:"action"`
+	CriticalityClass         LoadCriticalityClass            `json:"criticality_class"`
+	RequestedDeltaKW         float64                         `json:"requested_delta_kw"`
+	RecommendedDeltaKW       float64                         `json:"recommended_delta_kw"`
+	Reason                   string                          `json:"reason"`
+	Decision                 RecommendationDecision          `json:"decision"`
+	Status                   RecommendationReviewStatus      `json:"status"`
+	Sensitivity              RecommendationReviewSensitivity `json:"sensitivity"`
+	RequiresDualConfirmation bool                            `json:"requires_dual_confirmation"`
+	RequestedBy              string                          `json:"requested_by"`
+	RequestedByRole          string                          `json:"requested_by_role"`
+	FirstApprovedBy          string                          `json:"first_approved_by,omitempty"`
+	SecondApprovedBy         string                          `json:"second_approved_by,omitempty"`
+	RejectedBy               string                          `json:"rejected_by,omitempty"`
+	PostponedBy              string                          `json:"postponed_by,omitempty"`
+	PostponedUntil           *time.Time                      `json:"postponed_until,omitempty"`
+	Comment                  string                          `json:"comment,omitempty"`
+	FinalDecisionAt          *time.Time                      `json:"final_decision_at,omitempty"`
+	CreatedAt                time.Time                       `json:"created_at"`
+	UpdatedAt                time.Time                       `json:"updated_at"`
+	Summary                  []string                        `json:"summary,omitempty"`
+	Events                   []RecommendationReviewEvent     `json:"events,omitempty"`
+}
+
+type RecommendationReviewEvent struct {
+	EventID   string                 `json:"event_id"`
+	ReviewID  string                 `json:"review_id"`
+	SiteID    string                 `json:"site_id"`
+	RackID    string                 `json:"rack_id,omitempty"`
+	ActorID   string                 `json:"actor_id"`
+	ActorRole string                 `json:"actor_role"`
+	EventType string                 `json:"event_type"`
+	Comment   string                 `json:"comment,omitempty"`
+	Decision  RecommendationDecision `json:"decision,omitempty"`
+	CreatedAt time.Time              `json:"created_at"`
+}
+
+type ShadowPilotDataGap struct {
+	Code        string `json:"code"`
+	Description string `json:"description"`
+	Count       int    `json:"count"`
+}
+
+type ShadowPilotResult struct {
+	SiteID                   string                 `json:"site_id"`
+	Day                      time.Time              `json:"day"`
+	PolicyMode               string                 `json:"policy_mode"`
+	RecommendationsEvaluated int                    `json:"recommendations_evaluated"`
+	DecisionsCorrect         int                    `json:"decisions_correct"`
+	DecisionsBlocked         int                    `json:"decisions_blocked"`
+	DecisionsWouldEscalate   int                    `json:"decisions_would_escalate"`
+	MissingDataCount         int                    `json:"missing_data_count"`
+	MissingData              []ShadowPilotDataGap   `json:"missing_data,omitempty"`
+	Replay                   HistoricalReplayResult `json:"replay"`
+	Summary                  []string               `json:"summary,omitempty"`
 }

@@ -1,0 +1,51 @@
+{
+  "request_id": "req-shadow-001",
+  "result": {
+    "site_id": "site-cl-02",
+    "day": "2026-04-20T00:00:00Z",
+    "policy_mode": "advisory-first",
+    "recommendations_evaluated": 18,
+    "decisions_correct": 12,
+    "decisions_blocked": 3,
+    "decisions_would_escalate": 2,
+    "missing_data_count": 4,
+    "missing_data": [
+      {
+        "code": "sensor_hashrate_error",
+        "description": "some telemetry points report power without a valid hashrate reading",
+        "count": 2
+      }
+    ],
+    "replay": {
+      "site_id": "site-cl-02",
+      "policy_mode": "advisory-first",
+      "day": "2026-04-20T00:00:00Z",
+      "ramp_policy": {
+        "interval_seconds": 300,
+        "ramp_up_kw_per_interval": 20,
+        "ramp_down_kw_per_interval": 35
+      },
+      "observed_persisted_alerts": 5,
+      "observed": {
+        "name": "observed",
+        "description": "baseline observed operation",
+        "avg_jth": 18.9,
+        "peak_power_kw": 518.4,
+        "max_temp_celsius": 84.2,
+        "estimated_alert_count": 5,
+        "observed_alert_rows": 5,
+        "energy_mwh": 10.3,
+        "avg_ambient_celsius": 28.7,
+        "delta_avg_jth_pct": 0,
+        "delta_peak_power_pct": 0,
+        "delta_max_temp_pct": 0,
+        "delta_alert_count_pct": 0
+      },
+      "scenarios": []
+    },
+    "summary": [
+      "shadow mode compares observed operation against advisory alternatives without executing changes",
+      "data quality gaps still limit how many recommendations can be evaluated confidently"
+    ]
+  }
+}

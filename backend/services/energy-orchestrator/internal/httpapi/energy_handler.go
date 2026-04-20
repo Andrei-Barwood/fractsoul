@@ -88,12 +88,194 @@ type replayHistoricalResponse struct {
 	Result    orchestrator.HistoricalReplayResult `json:"result"`
 }
 
+type campusOverviewResponse struct {
+	RequestID string                      `json:"request_id"`
+	Overview  orchestrator.CampusOverview `json:"overview"`
+}
+
+type shadowPilotResponse struct {
+	RequestID string                         `json:"request_id"`
+	Result    orchestrator.ShadowPilotResult `json:"result"`
+}
+
+type recommendationReviewRequest struct {
+	SnapshotID         string                              `json:"snapshot_id" binding:"required"`
+	RecommendationID   string                              `json:"recommendation_id" binding:"required"`
+	RackID             string                              `json:"rack_id,omitempty"`
+	Action             string                              `json:"action" binding:"required"`
+	CriticalityClass   orchestrator.LoadCriticalityClass   `json:"criticality_class" binding:"required"`
+	RequestedDeltaKW   float64                             `json:"requested_delta_kw"`
+	RecommendedDeltaKW float64                             `json:"recommended_delta_kw"`
+	Reason             string                              `json:"reason" binding:"required"`
+	Decision           orchestrator.RecommendationDecision `json:"decision" binding:"required"`
+	Comment            string                              `json:"comment,omitempty"`
+	PostponeUntil      *time.Time                          `json:"postpone_until,omitempty"`
+}
+
+type recommendationReviewResponse struct {
+	RequestID string                                 `json:"request_id"`
+	Review    orchestrator.RecommendationReview      `json:"review"`
+	Event     orchestrator.RecommendationReviewEvent `json:"event"`
+}
+
+type recommendationReviewListResponse struct {
+	RequestID string                              `json:"request_id"`
+	SiteID    string                              `json:"site_id"`
+	Status    string                              `json:"status,omitempty"`
+	Items     []orchestrator.RecommendationReview `json:"items"`
+}
+
 func NewEnergyHandler(logger *slog.Logger, appService *service.Service, options RuntimeOptions) *EnergyHandler {
 	return &EnergyHandler{
 		logger:         logger,
 		service:        appService,
 		runtimeOptions: options,
 	}
+}
+
+func (h *EnergyHandler) CampusOverview(c *gin.Context) {
+	at, err := parseAt(c.Query("at"))
+	if err != nil {
+		WriteError(c, http.StatusBadRequest, "validation_error", fmt.Sprintf("invalid at timestamp: %v", err), nil)
+		return
+	}
+
+	result, err := h.service.GetCampusOverview(c.Request.Context(), at, service.CampusOverviewOptions{
+		RequestID:      RequestID(c),
+		AllowedSiteIDs: PrincipalSiteScopes(c),
+	})
+	if err != nil {
+		h.logger.Error("failed to build campus overview", "error", err)
+		WriteError(c, http.StatusServiceUnavailable, "dependency_unavailable", "failed to build campus overview", nil)
+		return
+	}
+
+	c.JSON(http.StatusOK, campusOverviewResponse{
+		RequestID: RequestID(c),
+		Overview:  result.Overview,
+	})
+}
+
+func (h *EnergyHandler) ShadowPilot(c *gin.Context) {
+	siteID := strings.TrimSpace(c.Param("site_id"))
+	if siteID == "" {
+		WriteError(c, http.StatusBadRequest, "validation_error", "site_id is required", nil)
+		return
+	}
+
+	day, err := parseDay(c.Query("day"))
+	if err != nil {
+		WriteError(c, http.StatusBadRequest, "validation_error", fmt.Sprintf("invalid day value: %v", err), nil)
+		return
+	}
+
+	result, err := h.service.RunShadowPilot(c.Request.Context(), siteID, day, service.ShadowPilotOptions{
+		RequestID: RequestID(c),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			WriteError(c, http.StatusNotFound, "not_found", "site_id is not configured in energy inventory or the pilot day has no data", nil)
+			return
+		}
+		h.logger.Error("failed to run shadow pilot", "site_id", siteID, "day", day.Format(time.DateOnly), "error", err)
+		WriteError(c, http.StatusServiceUnavailable, "dependency_unavailable", "failed to run shadow pilot", nil)
+		return
+	}
+
+	c.JSON(http.StatusOK, shadowPilotResponse{
+		RequestID: RequestID(c),
+		Result:    result.Result,
+	})
+}
+
+func (h *EnergyHandler) ListRecommendationReviews(c *gin.Context) {
+	siteID := strings.TrimSpace(c.Param("site_id"))
+	if siteID == "" {
+		WriteError(c, http.StatusBadRequest, "validation_error", "site_id is required", nil)
+		return
+	}
+
+	status, err := parseReviewStatus(c.Query("status"))
+	if err != nil {
+		WriteError(c, http.StatusBadRequest, "validation_error", err.Error(), nil)
+		return
+	}
+
+	result, err := h.service.ListRecommendationReviews(c.Request.Context(), siteID, status)
+	if err != nil {
+		h.logger.Error("failed to list recommendation reviews", "site_id", siteID, "status", status, "error", err)
+		WriteError(c, http.StatusServiceUnavailable, "dependency_unavailable", "failed to list recommendation reviews", nil)
+		return
+	}
+
+	c.JSON(http.StatusOK, recommendationReviewListResponse{
+		RequestID: RequestID(c),
+		SiteID:    siteID,
+		Status:    status,
+		Items:     result.Items,
+	})
+}
+
+func (h *EnergyHandler) ReviewRecommendation(c *gin.Context) {
+	siteID := strings.TrimSpace(c.Param("site_id"))
+	if siteID == "" {
+		WriteError(c, http.StatusBadRequest, "validation_error", "site_id is required", nil)
+		return
+	}
+
+	var request recommendationReviewRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		WriteError(c, http.StatusBadRequest, "validation_error", fmt.Sprintf("invalid request body: %v", err), ValidationDetails(err))
+		return
+	}
+
+	if !EnsureRackAccess(c, nonEmptyRackIDs(request.RackID)) {
+		return
+	}
+
+	result, err := h.service.ReviewRecommendation(c.Request.Context(), siteID, service.RecommendationReviewOptions{
+		ActorID:   PrincipalID(c),
+		ActorRole: PrincipalRole(c),
+		Request: orchestrator.RecommendationReviewRequest{
+			SnapshotID:         request.SnapshotID,
+			RecommendationID:   request.RecommendationID,
+			RackID:             request.RackID,
+			Action:             request.Action,
+			CriticalityClass:   request.CriticalityClass,
+			RequestedDeltaKW:   request.RequestedDeltaKW,
+			RecommendedDeltaKW: request.RecommendedDeltaKW,
+			Reason:             request.Reason,
+			Decision:           request.Decision,
+			Comment:            request.Comment,
+			PostponeUntil:      request.PostponeUntil,
+		},
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			WriteError(c, http.StatusNotFound, "not_found", "recommendation review target was not found", nil)
+			return
+		case strings.Contains(err.Error(), "already finalized"):
+			WriteError(c, http.StatusConflict, "review_finalized", err.Error(), nil)
+			return
+		case strings.Contains(err.Error(), "second approval must come from a different actor"):
+			WriteError(c, http.StatusConflict, "dual_confirmation_violation", err.Error(), nil)
+			return
+		case strings.Contains(err.Error(), "unsupported recommendation decision"):
+			WriteError(c, http.StatusBadRequest, "validation_error", err.Error(), nil)
+			return
+		default:
+			h.logger.Error("failed to review recommendation", "site_id", siteID, "recommendation_id", request.RecommendationID, "error", err)
+			WriteError(c, http.StatusServiceUnavailable, "dependency_unavailable", "failed to review recommendation", nil)
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, recommendationReviewResponse{
+		RequestID: RequestID(c),
+		Review:    result.Review,
+		Event:     result.Event,
+	})
 }
 
 func (h *EnergyHandler) SiteBudget(c *gin.Context) {
@@ -182,6 +364,9 @@ func (h *EnergyHandler) ValidateDispatch(c *gin.Context) {
 	var request validateDispatchRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		WriteError(c, http.StatusBadRequest, "validation_error", fmt.Sprintf("invalid request body: %v", err), ValidationDetails(err))
+		return
+	}
+	if !EnsureRackAccess(c, dispatchRequestRackIDs(request.Requests)) {
 		return
 	}
 
@@ -508,4 +693,41 @@ func parsePositiveInt(raw string, fallback int, max int, field string) (int, err
 		return 0, fmt.Errorf("%s must be <= %d", field, max)
 	}
 	return parsed, nil
+}
+
+func parseReviewStatus(raw string) (string, error) {
+	value := strings.TrimSpace(strings.ToLower(raw))
+	if value == "" {
+		return "", nil
+	}
+
+	switch value {
+	case string(orchestrator.ReviewStatusPendingSecondApproval),
+		string(orchestrator.ReviewStatusApproved),
+		string(orchestrator.ReviewStatusRejected),
+		string(orchestrator.ReviewStatusPostponed):
+		return value, nil
+	default:
+		return "", fmt.Errorf("status must be one of pending_second_approval, approved, rejected or postponed")
+	}
+}
+
+func dispatchRequestRackIDs(requests []orchestrator.DispatchRequest) []string {
+	rackIDs := make([]string, 0, len(requests))
+	for _, request := range requests {
+		rackIDs = append(rackIDs, request.RackID)
+	}
+	return rackIDs
+}
+
+func nonEmptyRackIDs(values ...string) []string {
+	items := make([]string, 0, len(values))
+	for _, value := range values {
+		normalizedValue := strings.TrimSpace(value)
+		if normalizedValue == "" {
+			continue
+		}
+		items = append(items, normalizedValue)
+	}
+	return items
 }

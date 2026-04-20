@@ -18,6 +18,9 @@ type Config struct {
 	APIKeys              []string
 	APIDefaultRole       string
 	APIKeyRoles          map[string]string
+	APIKeyPrincipals     map[string]string
+	APIKeySiteScopes     map[string][]string
+	APIKeyRackScopes     map[string][]string
 	DefaultAt            string
 	EventsEnabled        bool
 	NATSURL              string
@@ -41,6 +44,9 @@ func LoadConfig() Config {
 		APIKeys:              getEnvAsList("API_KEYS"),
 		APIDefaultRole:       defaultAPIRole(getEnv("API_DEFAULT_ROLE", "admin")),
 		APIKeyRoles:          getEnvAsKeyRoleMap("API_KEY_ROLES"),
+		APIKeyPrincipals:     getEnvAsKeyStringMap("API_KEY_PRINCIPALS"),
+		APIKeySiteScopes:     getEnvAsKeyScopeMap("API_KEY_SITE_SCOPES"),
+		APIKeyRackScopes:     getEnvAsKeyScopeMap("API_KEY_RACK_SCOPES"),
 		DefaultAt:            getEnv("ENERGY_DEFAULT_AT", "now"),
 		EventsEnabled:        getEnvAsBool("ENERGY_EVENTS_ENABLED", true),
 		NATSURL:              getEnv("NATS_URL", "nats://localhost:4222"),
@@ -149,6 +155,87 @@ func getEnvAsKeyRoleMap(key string) map[string]string {
 		return nil
 	}
 
+	return values
+}
+
+func getEnvAsKeyStringMap(key string) map[string]string {
+	raw := strings.TrimSpace(getEnv(key, ""))
+	if raw == "" {
+		return nil
+	}
+
+	parts := strings.Split(raw, ",")
+	values := make(map[string]string, len(parts))
+	for _, part := range parts {
+		entry := strings.TrimSpace(part)
+		if entry == "" {
+			continue
+		}
+
+		tokens := strings.SplitN(entry, ":", 2)
+		if len(tokens) != 2 {
+			continue
+		}
+
+		k := strings.TrimSpace(tokens[0])
+		v := strings.TrimSpace(tokens[1])
+		if k == "" || v == "" {
+			continue
+		}
+		values[k] = v
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	return values
+}
+
+func getEnvAsKeyScopeMap(key string) map[string][]string {
+	raw := strings.TrimSpace(getEnv(key, ""))
+	if raw == "" {
+		return nil
+	}
+
+	parts := strings.Split(raw, ",")
+	values := make(map[string][]string, len(parts))
+	for _, part := range parts {
+		entry := strings.TrimSpace(part)
+		if entry == "" {
+			continue
+		}
+
+		tokens := strings.SplitN(entry, ":", 2)
+		if len(tokens) != 2 {
+			continue
+		}
+
+		k := strings.TrimSpace(tokens[0])
+		if k == "" {
+			continue
+		}
+
+		scopeParts := strings.Split(tokens[1], "|")
+		scopes := make([]string, 0, len(scopeParts))
+		seen := make(map[string]struct{}, len(scopeParts))
+		for _, scopePart := range scopeParts {
+			scope := strings.TrimSpace(scopePart)
+			if scope == "" {
+				continue
+			}
+			if _, exists := seen[scope]; exists {
+				continue
+			}
+			seen[scope] = struct{}{}
+			scopes = append(scopes, scope)
+		}
+		if len(scopes) == 0 {
+			continue
+		}
+		values[k] = scopes
+	}
+	if len(values) == 0 {
+		return nil
+	}
 	return values
 }
 

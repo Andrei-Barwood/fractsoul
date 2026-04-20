@@ -1,4 +1,4 @@
-# MVP Bitcoin Mining - Kickoff D1-D100
+# MVP Bitcoin Mining - Kickoff D1-D109
 
 ## Estado
 - [x] D1: Objetivo del MVP, alcance y no-objetivos
@@ -105,6 +105,11 @@
 - [x] D102: Politica de rampas suaves
 - [x] D103: Replay historico de politicas energeticas
 - [x] D104: Endpoints operativos y explicabilidad
+- [x] D105: Vista operativa web del Energy Orchestrator
+- [x] D106: Auth, RBAC y gobernanza de recomendaciones
+- [x] D107: Bateria de pruebas operativas
+- [x] D108: Piloto en modo sombra
+- [x] D109: Cierre operativo y paso a operacion supervisada
 
 ## Navegacion
 - [D1 Objetivo y Alcance](./D1_objetivo_alcance.md)
@@ -128,6 +133,11 @@
 - [D102 Politica de rampas suaves](./D102_energy_orchestrator_rampas_suaves.md)
 - [D103 Replay historico de politicas energeticas](./D103_energy_orchestrator_replay_historico.md)
 - [D104 Endpoints operativos y explicabilidad](./D104_energy_orchestrator_endpoints_operativos.md)
+- [D105 Vista operativa web del Energy Orchestrator](./D105_energy_orchestrator_dashboard_web.md)
+- [D106 Auth, RBAC y gobernanza de recomendaciones](./D106_energy_orchestrator_auth_rbac_gobernanza.md)
+- [D107 Bateria de pruebas operativas](./D107_energy_orchestrator_pruebas_operativas.md)
+- [D108 Piloto en modo sombra](./D108_energy_orchestrator_piloto_sombra.md)
+- [D109 Cierre operativo y paso a operacion supervisada](./D109_energy_orchestrator_operacion_supervisada.md)
 - [D7 Revision semanal y backlog S1](./D7_revision_semanal_backlog_S1.md)
 - [D8 Monorepo y estructura](./D8_monorepo_estructura.md)
 - [D9 Entorno local Docker Compose](./D9_entorno_local_docker_compose.md)

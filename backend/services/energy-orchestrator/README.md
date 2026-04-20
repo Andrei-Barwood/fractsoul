@@ -13,6 +13,15 @@ Servicio inicial para gobierno de potencia, snapshots operativos y validacion de
 - enriquecer respuestas con contexto de `fractsoul`,
 - operar en modo `advisory-first`.
 
+## Objetivos del ultimo tramo (D105-D109)
+
+- exponer dashboard web embebida para campus y sitio,
+- proyectar riesgo operativo a 4 horas,
+- aplicar scopes por `site_id` y `rack_id`,
+- persistir reviews con doble aprobacion para acciones sensibles,
+- ejecutar piloto sombra sobre dias historicos,
+- dejar runbooks y checklist de paso a operacion supervisada.
+
 ## Ejecutar local
 
 ```bash
@@ -37,6 +46,9 @@ Variables:
 - `API_KEYS`
 - `API_DEFAULT_ROLE` (default `admin`)
 - `API_KEY_ROLES`
+- `API_KEY_PRINCIPALS`
+- `API_KEY_SITE_SCOPES`
+- `API_KEY_RACK_SCOPES`
 - `ENERGY_DEFAULT_AT` (default `now`)
 - `ENERGY_EVENTS_ENABLED` (default `true`)
 - `NATS_URL` (default `nats://localhost:4222`)
@@ -56,35 +68,46 @@ Para secretos sensibles se soporta `<ENV>_FILE`.
 
 - `GET /healthz`
 - `GET /metrics`
+- `GET /dashboard/energy/`
+- `GET /v1/energy/overview`
 - `GET /v1/energy/sites/:site_id/budget`
 - `GET /v1/energy/sites/:site_id/operations`
 - `GET /v1/energy/sites/:site_id/constraints/active`
 - `GET /v1/energy/sites/:site_id/recommendations/pending`
+- `GET /v1/energy/sites/:site_id/recommendations/reviews`
 - `GET /v1/energy/sites/:site_id/actions/blocked`
 - `GET /v1/energy/sites/:site_id/explanations`
 - `GET /v1/energy/sites/:site_id/replay/historical?day=YYYY-MM-DD`
+- `GET /v1/energy/sites/:site_id/pilot/shadow?day=YYYY-MM-DD`
 - `POST /v1/energy/sites/:site_id/dispatch/validate`
+- `POST /v1/energy/sites/:site_id/recommendations/reviews`
 
 Ejemplos:
 
 ```bash
 curl "http://localhost:8081/v1/energy/sites/site-cl-01/budget?include_context=true"
+curl "http://localhost:8081/v1/energy/overview"
 curl "http://localhost:8081/v1/energy/sites/site-cl-02/operations?include_context=true"
 curl "http://localhost:8081/v1/energy/sites/site-cl-02/constraints/active"
 curl "http://localhost:8081/v1/energy/sites/site-cl-02/recommendations/pending"
+curl "http://localhost:8081/v1/energy/sites/site-cl-02/recommendations/reviews"
 curl "http://localhost:8081/v1/energy/sites/site-cl-02/actions/blocked"
 curl "http://localhost:8081/v1/energy/sites/site-cl-02/explanations"
 curl "http://localhost:8081/v1/energy/sites/site-cl-02/replay/historical?day=$(date -u +%F)"
+curl "http://localhost:8081/v1/energy/sites/site-cl-02/pilot/shadow?day=$(date -u +%F)"
 curl "http://localhost:8081/v1/energy/sites/site-cl-01/budget?ambient_celsius=31.5&context_rack_limit=2&context_window_minutes=120"
 curl -X POST "http://localhost:8081/v1/energy/sites/site-cl-01/dispatch/validate" \
   -H "Content-Type: application/json" \
   -d @../../../docs/contracts/energy_dispatch_validate_request_v1.example.json
+curl -X POST "http://localhost:8081/v1/energy/sites/site-cl-02/recommendations/reviews" \
+  -H "Content-Type: application/json" \
+  -d @../../../docs/contracts/energy_recommendation_review_request_v1.example.json
 ```
 
 RBAC cuando `API_RBAC_ENABLED=true`:
 
-- `viewer`: lectura de presupuesto, operaciones, restricciones, recomendaciones, bloqueos, explicaciones y replay.
-- `operator`: lectura + validacion de dispatch.
+- `viewer`: lectura de presupuesto, overview, operaciones, restricciones, recomendaciones, reviews, bloqueos, explicaciones y replay.
+- `operator`: lectura + validacion de dispatch + reviews operativos.
 - `admin`: igual que `operator`.
 
 ## Integracion con Fractsoul
