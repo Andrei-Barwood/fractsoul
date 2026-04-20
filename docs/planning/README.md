@@ -1,4 +1,4 @@
-# MVP Bitcoin Mining - Kickoff D1-D90
+# MVP Bitcoin Mining - Kickoff D1-D109
 
 ## Estado
 - [x] D1: Objetivo del MVP, alcance y no-objetivos
@@ -91,6 +91,25 @@
 - [x] D88: Ejecutar demo y capturar feedback
 - [x] D89: Documentar resultados + proximos 90 dias
 - [x] D90: Retro final + backlog priorizado para S4
+- [x] D91: Charter tecnico del Energy Orchestrator
+- [x] D92: Matriz normativa y operativa del Energy Orchestrator
+- [x] D93: Contrato de integracion con Fractsoul
+- [x] D94: Modelo de inventario energetico del sitio
+- [x] D95: Primer motor de presupuesto de potencia
+- [x] D96: Modulo de restricciones de red interna
+- [x] D97: Seeds operativos del Energy Orchestrator
+- [x] D98: Snapshots persistidos del Energy Orchestrator
+- [x] D99: Emision de eventos canonicos del Energy Orchestrator
+- [x] D100: Integracion de endpoints con Fractsoul
+- [x] D101: Priorizacion de carga por criticidad
+- [x] D102: Politica de rampas suaves
+- [x] D103: Replay historico de politicas energeticas
+- [x] D104: Endpoints operativos y explicabilidad
+- [x] D105: Vista operativa web del Energy Orchestrator
+- [x] D106: Auth, RBAC y gobernanza de recomendaciones
+- [x] D107: Bateria de pruebas operativas
+- [x] D108: Piloto en modo sombra
+- [x] D109: Cierre operativo y paso a operacion supervisada
 
 ## Navegacion
 - [D1 Objetivo y Alcance](./D1_objetivo_alcance.md)
@@ -99,6 +118,26 @@
 - [D4 Arquitectura Logica v1](./D4_arquitectura_logica_v1.md)
 - [ADR-001 Stack Backend y Almacenamiento](./ADR-001-stack-backend-almacenamiento.md)
 - [ADR-002 Streaming, Observabilidad e Infraestructura](./ADR-002-streaming-observabilidad-infraestructura.md)
+- [ADR-003 Energy Orchestrator Advisory-first](./ADR-003-energy-orchestrator-advisory-first.md)
+- [D91 Charter tecnico del Energy Orchestrator](./D91_energy_orchestrator_charter.md)
+- [D92 Matriz normativa y operativa del Energy Orchestrator](./D92_energy_orchestrator_matriz_normativa_operativa.md)
+- [D93 Contrato de integracion con Fractsoul](./D93_energy_orchestrator_contrato_integracion.md)
+- [D94 Modelo de inventario energetico del sitio](./D94_energy_orchestrator_modelo_inventario.md)
+- [D95 Primer motor de presupuesto de potencia](./D95_energy_orchestrator_motor_presupuesto.md)
+- [D96 Modulo de restricciones de red interna](./D96_energy_orchestrator_restricciones_internas.md)
+- [D97 Seeds operativos del Energy Orchestrator](./D97_energy_orchestrator_seeds_operativos.md)
+- [D98 Snapshots persistidos del Energy Orchestrator](./D98_energy_orchestrator_snapshots_persistidos.md)
+- [D99 Emision de eventos canonicos del Energy Orchestrator](./D99_energy_orchestrator_eventos_canonicos.md)
+- [D100 Integracion de endpoints con Fractsoul](./D100_energy_orchestrator_integracion_endpoints.md)
+- [D101 Priorizacion de carga por criticidad](./D101_energy_orchestrator_priorizacion_carga.md)
+- [D102 Politica de rampas suaves](./D102_energy_orchestrator_rampas_suaves.md)
+- [D103 Replay historico de politicas energeticas](./D103_energy_orchestrator_replay_historico.md)
+- [D104 Endpoints operativos y explicabilidad](./D104_energy_orchestrator_endpoints_operativos.md)
+- [D105 Vista operativa web del Energy Orchestrator](./D105_energy_orchestrator_dashboard_web.md)
+- [D106 Auth, RBAC y gobernanza de recomendaciones](./D106_energy_orchestrator_auth_rbac_gobernanza.md)
+- [D107 Bateria de pruebas operativas](./D107_energy_orchestrator_pruebas_operativas.md)
+- [D108 Piloto en modo sombra](./D108_energy_orchestrator_piloto_sombra.md)
+- [D109 Cierre operativo y paso a operacion supervisada](./D109_energy_orchestrator_operacion_supervisada.md)
 - [D7 Revision semanal y backlog S1](./D7_revision_semanal_backlog_S1.md)
 - [D8 Monorepo y estructura](./D8_monorepo_estructura.md)
 - [D9 Entorno local Docker Compose](./D9_entorno_local_docker_compose.md)
@@ -183,8 +222,18 @@
 - [D88 Ejecutar demo y capturar feedback](./D88_ejecutar_demo_capturar_feedback.md)
 - [D89 Documentar resultados + proximos 90 dias](./D89_documentar_resultados_proximos_90_dias.md)
 - [D90 Retro final + backlog priorizado para S4](./D90_retro_final_backlog_priorizado_s4.md)
+- [D91 Charter tecnico del Energy Orchestrator](./D91_energy_orchestrator_charter.md)
+- [D92 Matriz normativa y operativa del Energy Orchestrator](./D92_energy_orchestrator_matriz_normativa_operativa.md)
+- [D93 Contrato de integracion con Fractsoul](./D93_energy_orchestrator_contrato_integracion.md)
+- [D94 Modelo de inventario energetico del sitio](./D94_energy_orchestrator_modelo_inventario.md)
+- [D95 Primer motor de presupuesto de potencia](./D95_energy_orchestrator_motor_presupuesto.md)
+- [D96 Modulo de restricciones de red interna](./D96_energy_orchestrator_restricciones_internas.md)
+- [D97 Seeds operativos del Energy Orchestrator](./D97_energy_orchestrator_seeds_operativos.md)
+- [D98 Snapshots persistidos del Energy Orchestrator](./D98_energy_orchestrator_snapshots_persistidos.md)
+- [D99 Emision de eventos canonicos del Energy Orchestrator](./D99_energy_orchestrator_emision_eventos.md)
+- [D100 Integracion de endpoints con Fractsoul](./D100_energy_orchestrator_integracion_endpoints.md)
 
-## Siguiente ejecucion sugerida (inicio S4)
-- Iniciar bloque P0 de seguridad operativa y RBAC por alcance.
-- Implementar outbox de notificaciones y politicas de retry por canal.
-- Definir SLOs formales y dashboard de seguimiento para operacion diaria.
+## Siguiente ejecucion sugerida (S4 fase 2)
+- Exponer lectura de historial de `energy_budget_snapshots` para auditoria operativa y comparacion de ventanas.
+- Publicar una API de lectura de alertas en `ingest-api` para enriquecer `energy-orchestrator` sin acceso directo a base de datos.
+- Integrar `energy-orchestrator` con `fractsoul-power-quality` y `fractsoul-electrical-digital-twin`.

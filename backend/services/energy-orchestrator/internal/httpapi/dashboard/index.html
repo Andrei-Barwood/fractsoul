@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fractsoul Energy Console</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="glow glow-a"></div>
+    <div class="glow glow-b"></div>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Fractsoul Energy Orchestrator</p>
+          <h1>Console Operativa de Campus</h1>
+          <p class="subtitle">
+            Resumen por sitio, headroom eléctrico, racks sacrificables, restricciones activas y riesgo proyectado para las próximas cuatro horas.
+          </p>
+        </div>
+        <div class="toolbar">
+          <label>
+            API key
+            <input id="apiKeyInput" type="password" placeholder="(opcional)" />
+          </label>
+          <button id="saveApiKeyButton" type="button">Guardar</button>
+          <button id="refreshButton" type="button">Actualizar</button>
+          <small id="apiKeyStatus">Auth deshabilitada o sin key local.</small>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Vista Campus</p>
+            <h2>Sitios Activos</h2>
+          </div>
+          <p id="campusMeta" class="muted">Sin datos.</p>
+        </div>
+        <div id="siteCards" class="site-grid"></div>
+      </section>
+
+      <section class="detail-grid">
+        <article class="panel">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Sitio Seleccionado</p>
+              <h2 id="detailTitle">Selecciona un sitio</h2>
+            </div>
+            <p id="detailMeta" class="muted">Esperando datos.</p>
+          </div>
+
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <span>Consumo Actual</span>
+              <strong id="kpiCurrentLoad">--</strong>
+            </div>
+            <div class="kpi-card">
+              <span>Permitido Seguro</span>
+              <strong id="kpiAllowedLoad">--</strong>
+            </div>
+            <div class="kpi-card">
+              <span>Margen Restante</span>
+              <strong id="kpiMargin">--</strong>
+            </div>
+            <div class="kpi-card">
+              <span>Tarifa Actual</span>
+              <strong id="kpiTariff">--</strong>
+            </div>
+            <div class="kpi-card">
+              <span>Racks Sacrificables</span>
+              <strong id="kpiSacrificable">--</strong>
+            </div>
+            <div class="kpi-card">
+              <span>Racks Bloqueados</span>
+              <strong id="kpiSafetyBlocked">--</strong>
+            </div>
+          </div>
+
+          <div class="projection-panel">
+            <div class="section-head compact">
+              <div>
+                <p class="section-kicker">Próximas 4 Horas</p>
+                <h3>Proyección de Riesgo</h3>
+              </div>
+            </div>
+            <svg id="riskChart" viewBox="0 0 720 220" role="img" aria-label="Proyección de riesgo"></svg>
+            <div id="riskProjectionList" class="projection-list"></div>
+          </div>
+        </article>
+
+        <article class="panel stack">
+          <section>
+            <div class="section-head compact">
+              <div>
+                <p class="section-kicker">Restricciones</p>
+                <h3>Activas</h3>
+              </div>
+            </div>
+            <div id="constraintsList" class="list-block"></div>
+          </section>
+
+          <section>
+            <div class="section-head compact">
+              <div>
+                <p class="section-kicker">Recomendaciones</p>
+                <h3>Pendientes</h3>
+              </div>
+            </div>
+            <div id="recommendationsList" class="list-block"></div>
+          </section>
+        </article>
+      </section>
+
+      <section class="detail-grid bottom-grid">
+        <article class="panel stack">
+          <section>
+            <div class="section-head compact">
+              <div>
+                <p class="section-kicker">Seguridad Operativa</p>
+                <h3>Acciones Bloqueadas</h3>
+              </div>
+            </div>
+            <div id="blockedList" class="list-block"></div>
+          </section>
+
+          <section>
+            <div class="section-head compact">
+              <div>
+                <p class="section-kicker">Gobernanza</p>
+                <h3>Timeline de Reviews</h3>
+              </div>
+            </div>
+            <div id="reviewsList" class="list-block"></div>
+          </section>
+        </article>
+
+        <article class="panel stack">
+          <section>
+            <div class="section-head compact">
+              <div>
+                <p class="section-kicker">Piloto Sombra</p>
+                <h3>Resultado Diario</h3>
+              </div>
+            </div>
+            <div id="shadowPilotSummary" class="list-block"></div>
+          </section>
+
+          <section>
+            <div class="section-head compact">
+              <div>
+                <p class="section-kicker">Explicabilidad</p>
+                <h3>Decisiones del Motor</h3>
+              </div>
+            </div>
+            <div id="explanationsList" class="list-block"></div>
+          </section>
+        </article>
+      </section>
+
+      <footer class="footer">
+        <p id="lastUpdated">Sin datos.</p>
+      </footer>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

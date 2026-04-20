@@ -2,13 +2,13 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SEED_SQL_FILE="${ROOT_DIR}/infra/db/seeds/001_synthetic_fleet.sql"
+SEEDS_DIR="${ROOT_DIR}/infra/db/seeds"
 CONTAINER_NAME="${TIMESCALEDB_CONTAINER:-fractsoul-timescaledb}"
 DB_USER="${POSTGRES_USER:-postgres}"
 DB_NAME="${POSTGRES_DB:-mining}"
 
-if [[ ! -f "${SEED_SQL_FILE}" ]]; then
-  echo "Seed file not found: ${SEED_SQL_FILE}" >&2
+if [[ ! -d "${SEEDS_DIR}" ]]; then
+  echo "Seeds directory not found: ${SEEDS_DIR}" >&2
   exit 1
 fi
 
@@ -17,5 +17,13 @@ if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
   exit 1
 fi
 
-docker exec -i "${CONTAINER_NAME}" psql -v ON_ERROR_STOP=1 -U "${DB_USER}" -d "${DB_NAME}" < "${SEED_SQL_FILE}"
-echo "Synthetic seed applied successfully."
+for seed_file in "${SEEDS_DIR}"/*.sql; do
+  if [[ ! -f "${seed_file}" ]]; then
+    continue
+  fi
+
+  echo "Applying seed $(basename "${seed_file}")..."
+  docker exec -i "${CONTAINER_NAME}" psql -v ON_ERROR_STOP=1 -U "${DB_USER}" -d "${DB_NAME}" < "${seed_file}"
+done
+
+echo "Seed set applied successfully."

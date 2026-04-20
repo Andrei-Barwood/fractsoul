@@ -1,0 +1,380 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap");
+
+:root {
+  --bg: #09151e;
+  --bg-alt: #102734;
+  --card: rgba(10, 26, 36, 0.84);
+  --card-soft: rgba(17, 41, 56, 0.75);
+  --line: rgba(135, 198, 220, 0.2);
+  --text: #e8fbff;
+  --muted: #99bcc6;
+  --accent: #56e4c6;
+  --warn: #ffb252;
+  --danger: #ff6f61;
+  --safe: #6ae09d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(68, 172, 160, 0.25), transparent 28%),
+    radial-gradient(circle at 90% 10%, rgba(255, 138, 72, 0.2), transparent 22%),
+    linear-gradient(145deg, #071018 10%, var(--bg-alt) 45%, var(--bg) 100%);
+  font-family: "IBM Plex Sans", sans-serif;
+}
+
+.glow {
+  position: fixed;
+  border-radius: 999px;
+  filter: blur(92px);
+  opacity: 0.32;
+  pointer-events: none;
+}
+
+.glow-a {
+  width: 240px;
+  height: 240px;
+  left: -70px;
+  top: 26vh;
+  background: #39d7bd;
+}
+
+.glow-b {
+  width: 220px;
+  height: 220px;
+  right: -60px;
+  top: 12vh;
+  background: #ff9353;
+}
+
+.shell {
+  position: relative;
+  z-index: 1;
+  width: min(1320px, 94vw);
+  margin: 1.4rem auto 2.4rem;
+}
+
+.hero,
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.hero {
+  margin-bottom: 1rem;
+}
+
+.eyebrow,
+.section-kicker {
+  margin: 0 0 0.2rem;
+  color: var(--accent);
+  font-size: 0.76rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+}
+
+h1 {
+  font-size: clamp(1.6rem, 3.2vw, 2.9rem);
+}
+
+h2 {
+  font-size: 1.15rem;
+}
+
+h3 {
+  font-size: 1rem;
+}
+
+.subtitle,
+.muted,
+.footer {
+  color: var(--muted);
+}
+
+.toolbar,
+.panel,
+.site-card,
+.kpi-card,
+.list-item,
+.projection-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(14px);
+}
+
+.toolbar,
+.panel {
+  border-radius: 18px;
+}
+
+.toolbar {
+  min-width: 310px;
+  padding: 0.95rem;
+}
+
+.toolbar label {
+  display: block;
+  margin-bottom: 0.45rem;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+input,
+button {
+  font: inherit;
+}
+
+input {
+  width: 100%;
+  padding: 0.7rem 0.8rem;
+  color: var(--text);
+  background: rgba(9, 26, 35, 0.76);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-bottom: 0.6rem;
+}
+
+button {
+  border: 0;
+  border-radius: 12px;
+  padding: 0.7rem 0.9rem;
+  margin-right: 0.4rem;
+  background: linear-gradient(135deg, var(--accent), #aef1cf);
+  color: #032125;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:hover {
+  filter: brightness(1.05);
+}
+
+.panel {
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.section-head.compact {
+  margin-bottom: 0.7rem;
+}
+
+.site-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0.8rem;
+}
+
+.site-card {
+  border-radius: 16px;
+  padding: 0.9rem;
+  cursor: pointer;
+  width: 100%;
+  margin-right: 0;
+  text-align: left;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.site-card:hover,
+.site-card.active {
+  transform: translateY(-2px);
+  border-color: rgba(86, 228, 198, 0.55);
+  background: rgba(12, 34, 46, 0.94);
+}
+
+.site-card-header,
+.site-card-stats {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.site-card-stats {
+  margin-top: 0.7rem;
+}
+
+.site-stat {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.site-stat span,
+.kpi-card span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.site-stat strong,
+.kpi-card strong {
+  font-size: 1.06rem;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 1rem;
+}
+
+.bottom-grid {
+  margin-top: 1rem;
+}
+
+.stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.kpi-card {
+  border-radius: 14px;
+  padding: 0.82rem;
+}
+
+.projection-panel {
+  margin-top: 0.8rem;
+}
+
+#riskChart {
+  width: 100%;
+  min-height: 220px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(13, 38, 51, 0.62), rgba(7, 20, 28, 0.92));
+}
+
+.projection-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin-top: 0.8rem;
+}
+
+.projection-card,
+.list-item,
+.empty-state {
+  border-radius: 14px;
+  padding: 0.78rem 0.85rem;
+}
+
+.projection-card {
+  background: var(--card-soft);
+}
+
+.list-block {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.list-item {
+  background: var(--card-soft);
+}
+
+.list-item p {
+  margin: 0.25rem 0 0;
+}
+
+.list-item small {
+  color: var(--muted);
+}
+
+.tag-row,
+.event-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.45rem;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.22rem 0.55rem;
+  font-size: 0.74rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.pill-low {
+  background: rgba(106, 224, 157, 0.14);
+  color: var(--safe);
+}
+
+.pill-moderate {
+  background: rgba(255, 178, 82, 0.16);
+  color: var(--warn);
+}
+
+.pill-high,
+.pill-critical {
+  background: rgba(255, 111, 97, 0.16);
+  color: var(--danger);
+}
+
+.pill-expensive {
+  background: rgba(255, 178, 82, 0.16);
+  color: var(--warn);
+}
+
+.pill-normal {
+  background: rgba(150, 180, 193, 0.12);
+  color: var(--muted);
+}
+
+.empty-state {
+  border: 1px dashed var(--line);
+  color: var(--muted);
+}
+
+.footer {
+  margin-top: 1rem;
+  text-align: right;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 960px) {
+  .hero,
+  .detail-grid {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .toolbar {
+    min-width: 0;
+  }
+
+  .kpi-grid,
+  .projection-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .shell {
+    width: min(96vw, 96vw);
+  }
+
+  .kpi-grid,
+  .projection-list {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "request_id": "req-review-001",
+  "review": {
+    "review_id": "a1c8124c-65a4-4f76-b6dc-1e210820be1c",
+    "site_id": "site-cl-02",
+    "snapshot_id": "4070c6e3-6fa2-498b-8ddd-a6a98526d1f2",
+    "recommendation_id": "rec-a18f3a50d3b9d0a2",
+    "rack_id": "rack-cl-02-03",
+    "action": "isolate",
+    "criticality_class": "safety_blocked",
+    "requested_delta_kw": -95.4,
+    "recommended_delta_kw": -20,
+    "reason": "safety block active on rack",
+    "decision": "approve",
+    "status": "pending_second_approval",
+    "sensitivity": "high",
+    "requires_dual_confirmation": true,
+    "requested_by": "energy.operator",
+    "requested_by_role": "operator",
+    "first_approved_by": "energy.operator",
+    "comment": "primer aprobador crea la solicitud en modo advisory-first",
+    "created_at": "2026-04-20T19:32:00Z",
+    "updated_at": "2026-04-20T19:32:00Z",
+    "summary": [
+      "decision approve for isolate on site site-cl-02",
+      "a second approver is still required before execution"
+    ],
+    "events": [
+      {
+        "event_id": "70c7ea3d-4586-46d1-9cb1-c7398e06047a",
+        "review_id": "a1c8124c-65a4-4f76-b6dc-1e210820be1c",
+        "site_id": "site-cl-02",
+        "rack_id": "rack-cl-02-03",
+        "actor_id": "energy.operator",
+        "actor_role": "operator",
+        "event_type": "awaiting_second_approval",
+        "comment": "primer aprobador crea la solicitud en modo advisory-first",
+        "decision": "approve",
+        "created_at": "2026-04-20T19:32:00Z"
+      }
+    ]
+  },
+  "event": {
+    "event_id": "70c7ea3d-4586-46d1-9cb1-c7398e06047a",
+    "review_id": "a1c8124c-65a4-4f76-b6dc-1e210820be1c",
+    "site_id": "site-cl-02",
+    "rack_id": "rack-cl-02-03",
+    "actor_id": "energy.operator",
+    "actor_role": "operator",
+    "event_type": "awaiting_second_approval",
+    "comment": "primer aprobador crea la solicitud en modo advisory-first",
+    "decision": "approve",
+    "created_at": "2026-04-20T19:32:00Z"
+  }
+}

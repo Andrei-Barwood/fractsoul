@@ -1,0 +1,107 @@
+{
+  "request_id": "6e6fd13a-6f2a-4c96-b8a1-872c1d1c16b9",
+  "snapshot_id": "snapshot-energy-20260417-170000-site-cl-01",
+  "budget": {
+    "site_id": "site-cl-01",
+    "policy_mode": "advisory-first",
+    "calculated_at": "2026-04-17T17:00:00Z",
+    "telemetry_observed_at": "2026-04-17T16:59:55Z",
+    "ambient_celsius": 28.5,
+    "nominal_capacity_kw": 20000,
+    "effective_capacity_kw": 19450,
+    "reserved_capacity_kw": 2917.5,
+    "safe_capacity_kw": 16532.5,
+    "current_load_kw": 11880.3,
+    "available_capacity_kw": 4652.2,
+    "safe_dispatchable_kw": 30,
+    "ramp_policy": {
+      "interval_seconds": 300,
+      "ramp_up_kw_per_interval": 30,
+      "ramp_down_kw_per_interval": 40
+    },
+    "constraint_flags": [
+      "site_ramp_policy_active"
+    ],
+    "racks": [
+      {
+        "rack_id": "rack-cl-01-01",
+        "bus_id": "bus-cl-01-a",
+        "feeder_id": "feeder-cl-01-01",
+        "pdu_id": "pdu-cl-01-01",
+        "criticality_class": "preferred_production",
+        "criticality_rank": 3,
+        "criticality_reason": "Primary preferred production rack for CL01.",
+        "safety_blocked": false,
+        "current_load_kw": 112.4,
+        "nominal_capacity_kw": 120,
+        "effective_capacity_kw": 120,
+        "reserved_capacity_kw": 12,
+        "safe_capacity_kw": 108,
+        "available_capacity_kw": 0,
+        "thermal_density_limit_kw": 140,
+        "thermal_headroom_kw": 27.6,
+        "ramp_up_limit_kw": 30,
+        "ramp_down_limit_kw": 40,
+        "up_ramp_remaining_kw": 30,
+        "down_ramp_remaining_kw": 40,
+        "safe_dispatchable_kw": 0,
+        "constraint_flags": [
+          "rack_current_load_above_safe_capacity",
+          "rack_safe_capacity_exhausted"
+        ]
+      },
+      {
+        "rack_id": "rack-cl-01-03",
+        "bus_id": "bus-cl-01-a",
+        "feeder_id": "feeder-cl-01-03",
+        "pdu_id": "pdu-cl-01-03",
+        "criticality_class": "sacrificable_load",
+        "criticality_rank": 1,
+        "criticality_reason": "Curtailable rack used for load shedding demonstrations.",
+        "safety_blocked": false,
+        "current_load_kw": 92.7,
+        "nominal_capacity_kw": 120,
+        "effective_capacity_kw": 120,
+        "reserved_capacity_kw": 12,
+        "safe_capacity_kw": 108,
+        "available_capacity_kw": 15.3,
+        "thermal_density_limit_kw": 140,
+        "thermal_headroom_kw": 47.3,
+        "ramp_up_limit_kw": 10,
+        "ramp_down_limit_kw": 15,
+        "up_ramp_remaining_kw": 10,
+        "down_ramp_remaining_kw": 15,
+        "safe_dispatchable_kw": 10,
+        "constraint_flags": []
+      }
+    ]
+  },
+  "fractsoul_context": {
+    "source": "fractsoul-ingest-api",
+    "window_minutes": 60,
+    "site_efficiency": {
+      "site_id": "site-cl-01",
+      "miners": 100,
+      "racks": 5,
+      "samples": 6000,
+      "avg_hashrate_ths": 116.2,
+      "avg_power_watts": 3310.5,
+      "avg_temp_celsius": 67.1,
+      "avg_ambient_celsius": 28.4,
+      "raw_jth": 28.49,
+      "compensated_jth": 28.22,
+      "last_seen_at": "2026-04-17T16:59:55Z"
+    },
+    "telemetry_summary": {
+      "window_minutes": 60,
+      "samples": 6000,
+      "avg_hashrate_ths": 116.2,
+      "avg_power_watts": 3310.5,
+      "avg_temp_celsius": 67.1,
+      "p95_temp_celsius": 74.2,
+      "max_temp_celsius": 79.1,
+      "avg_fan_rpm": 5820,
+      "avg_efficiency_jth": 28.49
+    }
+  }
+}

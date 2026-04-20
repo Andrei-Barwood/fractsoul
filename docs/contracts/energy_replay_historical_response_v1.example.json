@@ -1,0 +1,55 @@
+{
+  "request_id": "179d7a86-6f44-4555-b75a-c6297b40ee97",
+  "result": {
+    "site_id": "site-cl-02",
+    "policy_mode": "advisory-first",
+    "day": "2026-04-17T00:00:00Z",
+    "ramp_policy": {
+      "interval_seconds": 300,
+      "ramp_up_kw_per_interval": 20,
+      "ramp_down_kw_per_interval": 35
+    },
+    "observed_persisted_alerts": 4,
+    "observed": {
+      "name": "observed",
+      "description": "observed site operation without replayed policy changes",
+      "avg_jth": 29.14,
+      "peak_power_kw": 838.2,
+      "max_temp_celsius": 92.4,
+      "estimated_alert_count": 8,
+      "observed_alert_rows": 4,
+      "energy_mwh": 12.61,
+      "avg_ambient_celsius": 27.4
+    },
+    "scenarios": [
+      {
+        "name": "priority_balanced",
+        "description": "curtails blocked and sacrificial load first while preserving preferred production as much as possible",
+        "avg_jth": 28.92,
+        "peak_power_kw": 820.1,
+        "max_temp_celsius": 87.6,
+        "estimated_alert_count": 5,
+        "energy_mwh": 12.22,
+        "avg_ambient_celsius": 27.4,
+        "delta_avg_jth_pct": -0.75,
+        "delta_peak_power_pct": -2.16,
+        "delta_max_temp_pct": -5.19,
+        "delta_alert_count_pct": -37.5
+      },
+      {
+        "name": "protective_thermal",
+        "description": "uses a tighter thermal ceiling and more aggressive down-ramp to reduce thermal excursions and alerts",
+        "avg_jth": 28.44,
+        "peak_power_kw": 790.3,
+        "max_temp_celsius": 84.2,
+        "estimated_alert_count": 3,
+        "energy_mwh": 11.91,
+        "avg_ambient_celsius": 27.4,
+        "delta_avg_jth_pct": -2.4,
+        "delta_peak_power_pct": -5.72,
+        "delta_max_temp_pct": -8.87,
+        "delta_alert_count_pct": -62.5
+      }
+    ]
+  }
+}

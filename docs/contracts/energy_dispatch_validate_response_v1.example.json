@@ -1,0 +1,99 @@
+{
+  "request_id": "b8a72861-75e8-47c3-a7f3-5db62f90c95d",
+  "snapshot_id": "snapshot-energy-20260417-170500-site-cl-01",
+  "result": {
+    "site_id": "site-cl-01",
+    "policy_mode": "advisory-first",
+    "requested_at": "2026-04-17T17:05:00Z",
+    "requested_by": "ops@fractsoul.local",
+    "summary_status": "partial",
+    "decisions": [
+      {
+        "rack_id": "rack-cl-01-01",
+        "requested_delta_kw": 35,
+        "accepted_delta_kw": 30,
+        "status": "partial",
+        "explanation": "the request was partially accepted because one or more electrical, thermal or ramp limits became active before the full delta could be applied.",
+        "violations": [
+          {
+            "scope": "rack",
+            "scope_id": "rack-cl-01-01",
+            "code": "rack_ramp_up_limit",
+            "message": "requested dispatch would exceed the rack up-ramp policy for the interval",
+            "limit_kw": 30,
+            "current_load_kw": 95,
+            "requested_delta_kw": 35,
+            "available_kw": 30
+          }
+        ]
+      },
+      {
+        "rack_id": "rack-cl-01-03",
+        "requested_delta_kw": -20,
+        "accepted_delta_kw": -15,
+        "status": "partial",
+        "explanation": "the request was partially accepted because one or more electrical, thermal or ramp limits became active before the full delta could be applied.",
+        "violations": [
+          {
+            "scope": "rack",
+            "scope_id": "rack-cl-01-03",
+            "code": "rack_ramp_down_limit",
+            "message": "requested curtailment would exceed the rack down-ramp policy for the interval",
+            "limit_kw": 15,
+            "current_load_kw": 92.7,
+            "requested_delta_kw": -20,
+            "available_kw": 15
+          }
+        ]
+      }
+    ],
+    "violations": [
+      {
+        "scope": "rack",
+        "scope_id": "rack-cl-01-01",
+        "code": "rack_ramp_up_limit",
+        "message": "requested dispatch would exceed the rack up-ramp policy for the interval",
+        "limit_kw": 30,
+        "current_load_kw": 95,
+        "requested_delta_kw": 35,
+        "available_kw": 30
+      },
+      {
+        "scope": "rack",
+        "scope_id": "rack-cl-01-03",
+        "code": "rack_ramp_down_limit",
+        "message": "requested curtailment would exceed the rack down-ramp policy for the interval",
+        "limit_kw": 15,
+        "current_load_kw": 92.7,
+        "requested_delta_kw": -20,
+        "available_kw": 15
+      }
+    ]
+  },
+  "budget": {
+    "site_id": "site-cl-01",
+    "policy_mode": "advisory-first",
+    "calculated_at": "2026-04-17T17:05:00Z",
+    "telemetry_observed_at": "2026-04-17T16:59:55Z",
+    "ambient_celsius": 29.1,
+    "nominal_capacity_kw": 20000,
+    "effective_capacity_kw": 19380,
+    "reserved_capacity_kw": 2907,
+    "safe_capacity_kw": 16473,
+    "current_load_kw": 11880.3,
+    "available_capacity_kw": 4592.7,
+    "safe_dispatchable_kw": 30,
+    "ramp_policy": {
+      "interval_seconds": 300,
+      "ramp_up_kw_per_interval": 30,
+      "ramp_down_kw_per_interval": 40
+    },
+    "constraint_flags": [
+      "site_ramp_policy_active"
+    ]
+  },
+  "fractsoul_context": {
+    "source": "fractsoul-ingest-api",
+    "window_minutes": 60
+  }
+}

@@ -17,6 +17,96 @@ if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
   exit 1
 fi
 
+wait_for_database_ready() {
+  local max_attempts="${DB_READY_MAX_ATTEMPTS:-60}"
+  local sleep_seconds="${DB_READY_SLEEP_SECONDS:-1}"
+
+  for attempt in $(seq 1 "${max_attempts}"); do
+    if docker exec "${CONTAINER_NAME}" psql -tA -U "${DB_USER}" -d "${DB_NAME}" -c "SELECT 1" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "${sleep_seconds}"
+  done
+
+  echo "Database ${DB_NAME} in ${CONTAINER_NAME} did not become query-ready in time." >&2
+  docker logs --tail 100 "${CONTAINER_NAME}" >&2 || true
+  exit 1
+}
+
+migration_materialized_sql() {
+  case "$1" in
+    0001_initial_schema.sql)
+      cat <<'SQL'
+SELECT to_regclass('public.telemetry_readings') IS NOT NULL
+   AND to_regclass('public.telemetry_latest') IS NOT NULL;
+SQL
+      ;;
+    0002_timescale_optimizations_s2.sql)
+      cat <<'SQL'
+SELECT to_regclass('public.telemetry_agg_minute') IS NOT NULL
+   AND to_regclass('public.telemetry_agg_hour') IS NOT NULL;
+SQL
+      ;;
+    0003_alerts_engine_s2.sql)
+      cat <<'SQL'
+SELECT to_regclass('public.alerts') IS NOT NULL
+   AND to_regclass('public.alert_notifications') IS NOT NULL;
+SQL
+      ;;
+    0004_s3_recommendation_changes.sql)
+      cat <<'SQL'
+SELECT to_regclass('public.recommendation_changes') IS NOT NULL;
+SQL
+      ;;
+    0005_s3_daily_reports.sql)
+      cat <<'SQL'
+SELECT to_regclass('public.daily_reports') IS NOT NULL;
+SQL
+      ;;
+    0006_s4_energy_orchestrator.sql)
+      cat <<'SQL'
+SELECT to_regclass('public.energy_site_profiles') IS NOT NULL
+   AND to_regclass('public.energy_rack_profiles') IS NOT NULL;
+SQL
+      ;;
+    0007_s4_energy_snapshots.sql)
+      cat <<'SQL'
+SELECT to_regclass('public.energy_budget_snapshots') IS NOT NULL;
+SQL
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+mark_existing_migration() {
+  local version="$1"
+  local sql
+  local materialized
+
+  if ! sql="$(migration_materialized_sql "${version}")"; then
+    return 1
+  fi
+
+  materialized="$(
+    docker exec "${CONTAINER_NAME}" psql -tA -U "${DB_USER}" -d "${DB_NAME}" -c "${sql}" \
+      | tr -d '[:space:]'
+  )"
+
+  if [[ "${materialized}" != "t" ]]; then
+    return 1
+  fi
+
+  echo "Backfilling ${version} in schema_migrations (objects already present)"
+  docker exec "${CONTAINER_NAME}" psql -v ON_ERROR_STOP=1 -U "${DB_USER}" -d "${DB_NAME}" \
+    -c "INSERT INTO schema_migrations(version) VALUES ('${version}') ON CONFLICT (version) DO NOTHING" \
+    >/dev/null
+  return 0
+}
+
+wait_for_database_ready
+
 docker exec -i "${CONTAINER_NAME}" psql -v ON_ERROR_STOP=1 -U "${DB_USER}" -d "${DB_NAME}" <<'SQL'
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY,
@@ -30,6 +120,10 @@ for migration in "${MIGRATIONS_DIR}"/*.sql; do
 
   if [[ "${already_applied}" == "1" ]]; then
     echo "Skipping ${version} (already applied)"
+    continue
+  fi
+
+  if mark_existing_migration "${version}"; then
     continue
   fi
 

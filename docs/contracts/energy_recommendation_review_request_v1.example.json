@@ -1,0 +1,12 @@
+{
+  "snapshot_id": "4070c6e3-6fa2-498b-8ddd-a6a98526d1f2",
+  "recommendation_id": "rec-a18f3a50d3b9d0a2",
+  "rack_id": "rack-cl-02-03",
+  "action": "isolate",
+  "criticality_class": "safety_blocked",
+  "requested_delta_kw": -95.4,
+  "recommended_delta_kw": -20,
+  "reason": "safety block active on rack",
+  "decision": "approve",
+  "comment": "primer aprobador crea la solicitud en modo advisory-first"
+}
